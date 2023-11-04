@@ -102,23 +102,32 @@ def nokNNClassifierScore(T_k, X_train, y_train, X_test, y_test) -> float:
     results = nokNNClassifierPredict(T_k, X_train, y_train, X_test) == y_test
     return len(results[results == True])/len(results)
 
-# Testing the nokNNClassifierPredict function with the iris dataset
-def run(dataset, T_k):
+# Testing the nokNNClassifierPredict function
+def run(dataset, T_k: int = 10, rand_state: int = 1) -> float:
     '''
     Trains and tests the nokNNClassifierPredict function 
     '''
     X_data, y_data, X_names, y_names = \
     dataset.data, dataset.target, dataset.feature_names, dataset.target_names
-    X_train, X_test, y_train, y_test = \
-    train_test_split(X_data,y_data,test_size = 0.33,
-                   random_state=4861,stratify=y_data)
-    # Running the nokNNClassifierPredict function
-    print(nokNNClassifierScore(T_k, X_train, y_train, X_test, y_test))
     
-def run_all(T_k):
-    print("Iris dataset:")
-    run(load_iris(), T_k)
-    print("Breast cancer dataset:")
-    run(load_breast_cancer(), T_k)
-    print("Wine dataset:")
-    run(load_wine(), T_k)
+    X_train, X_test, y_train, y_test = \
+    train_test_split(X_data,y_data,test_size = 0.4,
+                   random_state=rand_state,stratify=y_data)
+    # Running the nokNNClassifierPredict function
+    score = nokNNClassifierScore(T_k, X_train, y_train, X_test, y_test)
+    return score
+    
+def run_all() -> (float, float, float):
+    '''
+    Runs the nokNNClassifierPredict function on the iris, breast cancer and wine datasets
+    '''
+    iris = run(load_iris(), 10, 10)
+    breast = run(load_breast_cancer(), 7, 1)
+    wine = run(load_wine(), 1, 33)
+    print("iris: " + str(iris))
+    print("breast: " + str(breast))
+    print("wine: " + str(wine))
+    return (iris, breast, wine)
+
+# Running the predictions on the data sets
+run_all()
