@@ -114,54 +114,45 @@ import numpy as np
 # original entre los ejemplos y sus valores de clasificación.
 # La división ha de ser ALEATORIA y ESTRATIFICADA respecto del valor de clasificación.
 
-# ------------------------------------------------------------------------------
-# Ejemplos:
-# =========
+def particion_entr_prueba(X,y,test=0.20):
+    '''
+    This function takes a dataset X and its corresponding classification values y,
+    and divides them into training and test data, in the proportion marked by the
+    test argument, and preserving the original correspondence between the examples
+    and their classification values. The division is random and stratified.
 
-# En votos:
+    param X: the dataset
+    param y: the corresponding classification values
+    param test: the proportion for the test data
+    return: the training and test data, and their corresponding classification values
+    '''
+    # Check if the parameters are valid
+    if len(X) != len(y): raise ValueError("The length of X and y must be the same")
+    if test < 0 or test > 1: raise ValueError("The test parameter must be between 0 and 1")
 
-# In[1]: Xe_votos,Xp_votos,ye_votos,yp_votos          
-#            =particion_entr_prueba(X_votos,y_votos,test=1/3)
-
-# Como se observa, se han separado 2/3 para entrenamiento y 1/3 para prueba:
-# In[2]: y_votos.shape[0],ye_votos.shape[0],yp_votos.shape[0]
-# Out[2]: (435, 290, 145)
-
-# Las proporciones entre las clases son (aprox) las mismas en los dos conjuntos de
-# datos, y la misma que en el total: 267/168=178/112=89/56
-
-# In[3]: np.unique(y_votos,return_counts=True)
-# Out[3]: (array(['democrata', 'republicano'], dtype='<U11'), array([267, 168]))
-# In[4]: np.unique(ye_votos,return_counts=True)
-# Out[4]: (array(['democrata', 'republicano'], dtype='<U11'), array([178, 112]))
-# In[5]: np.unique(yp_votos,return_counts=True)
-# Out[5]: (array(['democrata', 'republicano'], dtype='<U11'), array([89, 56]))
-
-# La división en trozos es aleatoria y, por supuesto, en el orden en el que
-# aparecen los datos en Xe_votos,ye_votos y en Xp_votos,yp_votos, se preserva
-# la correspondencia original que hay en X_votos,y_votos.
-
-
-# Otro ejemplo con más de dos clases:
-
-# In[6]: Xe_credito,Xp_credito,ye_credito,yp_credito               
-#              =particion_entr_prueba(X_credito,y_credito,test=0.4)
-
-# In[7]: np.unique(y_credito,return_counts=True)
-# Out[7]: (array(['conceder', 'estudiar', 'no conceder'], dtype='<U11'),
-#          array([202, 228, 220]))
-
-# In[8]: np.unique(ye_credito,return_counts=True)
-# Out[8]: (array(['conceder', 'estudiar', 'no conceder'], dtype='<U11'),
-#          array([121, 137, 132]))
-
-# In[9]: np.unique(yp_credito,return_counts=True)
-# Out[9]: (array(['conceder', 'estudiar', 'no conceder'], dtype='<U11'),
-#          array([81, 91, 88]))
-# ------------------------------------------------------------------
-
-
-
+    # Map the number of examples of each distinct classification value
+    n_per_class = dict(zip(*np.unique(y, return_counts=True)))
+    n_per_class_test = { k: int(round(v * test)) for k, v in n_per_class.items() }
+    # Initialize the training and test data and their corresponding classification values
+    X_train, X_test = np.empty((0, X.shape[1])), np.empty((0, X.shape[1]))
+    y_train, y_test = np.empty((0,)), np.empty((0,))
+    # Iterate over the classification values
+    test_indices = np.empty((0,), dtype=int)
+    for c in np.unique(y):
+        # Get the indices of the examples with the current classification value
+        indices = np.where(y == c)[0]
+        test_indices = np.append(test_indices, np.random.choice(indices, n_per_class_test[c], replace=False))
+        # Get the indices of the examples with the current classification value
+        test_indices_c = np.intersect1d(indices, test_indices, assume_unique=True)
+        train_indices_c = np.setdiff1d(indices, test_indices_c, assume_unique=True)
+        # Append the examples with the current classification value to the training and test data
+        X_train = np.append(X_train, X[train_indices_c], axis=0)
+        X_test = np.append(X_test, X[test_indices_c], axis=0)
+        # Append the classification values of the examples with the current classification value to the training and test data
+        y_train = np.append(y_train, y[train_indices_c], axis=0)
+        y_test = np.append(y_test, y[test_indices_c], axis=0)
+    # Return the training and test data and their corresponding classification values
+    return X_train, X_test, y_train, y_test
 
 
 # ===========================================
