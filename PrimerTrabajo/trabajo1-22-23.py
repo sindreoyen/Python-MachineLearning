@@ -445,6 +445,53 @@ def rendimiento(clasif,X,y):
 # Definir una función: 
 
 #  rendimiento_validacion_cruzada(clase_clasificador,params,X,y,n=5)
+def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5):
+    '''
+    This function calculates the average performance of a classifier, using the cross validation technique
+    with n partitions. The arrays X and y are the data and the expected classification, respectively. The
+    argument clase_clasificador is the name of the class that implements the classifier. The argument
+    params is a dictionary whose keys are parameter names of the classifier's constructor and the values
+    associated with those keys are the values of those parameters to call the constructor.
+
+    param clase_clasificador: the name of the class that implements the classifier
+    param params: a dictionary whose keys are parameter names of the classifier's constructor and the values
+                  associated with those keys are the values of those parameters to call the constructor
+    param X: the data
+    param y: the expected classification
+    param n: the number of partitions
+    return: the average performance of the classifier
+    '''
+    # Check if the parameters are valid
+    if n < 2: raise ValueError("The number of partitions must be at least 2")
+    if len(X) != len(y): raise ValueError("The length of X and y must be the same")
+
+    # Partitioning the data using the particion_entr_prueba function
+    # Init empty arrays
+    X_partitions = np.empty((n,), dtype=object)
+    y_partitions = np.empty((n,), dtype=object)
+    for i in range(n):
+        # The last partition should contain all remaining data
+        if i == n - 1: X_partitions[i], y_partitions[i] = X, y; break
+        X, X_partitions[i], y, y_partitions[i] = particion_entr_prueba(X, y, test=1/(n-i))
+    
+    # Calculate the performance for each partition
+    performances = np.empty((n,))
+    for i in range(n):
+        # Init the classifier
+        classifier = clase_clasificador(**params)
+        # Train the classifier with all partitions except the current one
+        # Keeping the current partitions as holdout for the performance calculation
+        X_train = np.concatenate(np.delete(X_partitions, i, axis=0))
+        y_train = np.concatenate(np.delete(y_partitions, i, axis=0))
+        classifier.entrena(X_train, y_train)
+        print("Training", "#", i + 1, "done")
+        # Calculate the performance for the current partition
+        performances[i] = rendimiento(classifier, X_partitions[i], y_partitions[i])
+    
+    # Return the average performance
+    return np.mean(performances)
+
+
 
 # que devuelve el rendimiento medio de un clasificador, mediante la técnica de
 # validación cruzada con n particiones. Los arrays X e y son los datos y la
@@ -467,11 +514,6 @@ def rendimiento(clasif,X,y):
 # Usando la función que se pide sería (nótese que debido a la aleatoriedad, 
 # no tiene por qué coincidir exactamente el resultado):
 
-# >>> rendimiento_validacion_cruzada(RegresionLogisticaMiniBatch,         
-#             {"batch_tam":16,"rate_decay":True},Xe_cancer,ye_cancer,n=5)
-# 0.9121095227289917
-
-
 # El resultado es la media de rendimientos obtenidos entrenando cada vez con
 # todas las particiones menos una, y probando el rendimiento con la parte que
 # se ha dejado fuera. Las particiones deben ser aleatorias y estratificadas. 
@@ -480,12 +522,12 @@ def rendimiento(clasif,X,y):
 # otros valores de esos parámetros), finalmente entrenaríamos con el conjunto de
 # entrenamiento completo:
 
-# >>> LR16=RegresionLogisticaMiniBatch(batch_tam=16,rate_decay=True)
-# >>> LR16.entrena(Xe_cancer,ye_cancer)
+#LR16=RegresionLogisticaMiniBatch(batch_tam=16,rate_decay=True)
+#LR16.entrena(Xe_cancer,ye_cancer)
 
 # Y daríamos como estimación final el rendimiento en el conjunto de prueba, que
 # hasta ahora no hemos usado:
-# >>> rendimiento(LR16,Xp_cancer,yp_cancer)
+#rendimiento(LR16,Xp_cancer,yp_cancer)
 # 0.9203539823008849
 
 #------------------------------------------------------------------------------
