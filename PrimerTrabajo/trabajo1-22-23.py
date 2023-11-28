@@ -42,6 +42,7 @@
 # SE PIDE USAR NUMPY EN LA MEDIDA DE LO POSIBLE. 
 
 import numpy as np
+from utils import printProgressBar
 
 # SE PENALIZARÁ el uso de bucles convencionales si la misma tarea se puede
 # hacer más eficiente con operaciones entre arrays que proporciona numpy. 
@@ -163,29 +164,165 @@ def particion_entr_prueba(X,y,test=0.20):
 # Se pide implementar el clasificador de regresión logística mini-batch 
 # a través de una clase python, que ha de tener la siguiente estructura:
 
-# class RegresionLogisticaMiniBatch():
+class RegresionLogisticaMiniBatch():
+    # -- Attributes --
+    trained = False
+    classes = None
+    inverted_classes = None
 
-#    def __init__(self,normalizacion=False,
-#                 rate=0.1,rate_decay=False,batch_tam=64,
-#                 pesos_iniciales=None):
+    # -- Constructor --
+    def __init__(self,normalizacion=False,
+                 rate=0.1,rate_decay=False,batch_tam=64,
+                 pesos_iniciales=None):
+        '''
+        This class implements the mini-batch logistic regression classifier.
 
-#          .....
-         
-#    def entrena(self,entr,clas_entr,n_epochs=1000,
-#                reiniciar_pesos=False):
+        param normalizacion: indicates if the data should be normalized
+        param rate: the learning rate. Defines the size of the steps taken in the gradient descent
+        param rate_decay: indicates if the learning rate should decrease in each epoch
+        param batch_tam: the size of the mini-batches
+        param pesos_iniciales: if None, the initial weights are initialized randomly.
+                                If not, it must provide an array of weights that will
+                                be used as initial weights.
+        '''
+        self.normalizacion, self.rate, self.rate_decay, self.batch_tam, self.pesos_iniciales = \
+            normalizacion, rate, rate_decay, batch_tam, pesos_iniciales
 
-#         ......
+    # -- Methods -- 
+    def entrena(self,entr,clas_entr,n_epochs=1000,
+                reiniciar_pesos=False):
+        '''
+        This method trains the classifier. This implementation is following based on the formula for weight
+        updates using mini-batch gradient descent, as explained in the slides of the module and listed below:
 
-#     def clasifica_prob(self,E):
+        .. math::
+        w_i \leftarrow w_i + \alpha \sum_{k=1}^{P} x_{ji}^{(k)} (y^{(k)} - \mathbf{w} \cdot \mathbf{x}^{(k)})
+    
+        where:
+        - :math:`w_i` is the i-th weight,
+        - :math:`\alpha` is the learning rate,
+        - :math:`P` is the number of examples in each mini-batch,
+        - :math:`x_{ji}^{(k)}` is the j-th feature of the i-th example in the mini-batch,
+        - :math:`y^{(k)}` is the target output for the k-th example in the mini-batch,
+        - :math:`\mathbf{w}` is the weight vector,
+        - :math:`\mathbf{x}^{(k)}` is the feature vector of the k-th example.
 
+        param entr: the training data
+        param clas_entr: the classification values tied to the training data
+        param n_epochs: the number of epochs for the training
+        param reiniciar_pesos: if True, the weights are initialized randomly at the beginning of the training, 
+                                with values between -1 and 1. If False, the weights are initialized only the first
+                                time the method is called. In subsequent times, the training continues from the
+                                weights calculated in the previous training. This can be useful to continue the
+                                training from a previous training, if for example new data is available.
+        '''
+        # Create numeric mapping for the classes
+        unique_classes = np.unique(clas_entr)
+        if len(unique_classes) != 2: raise ValueError("The number of classes must be 2")
+        # If the classes are text values, map them to numeric values
+        if not np.issubdtype(clas_entr.dtype, np.number):
+            self.classes = np.sort(unique_classes)
+            self.inverted_classes = { v: k for k, v in enumerate(self.classes) }
+            clas_entr = np.array([self.inverted_classes[c] for c in clas_entr])
+        else: self.classes = unique_classes
 
-#         ......
+        # Initialize weights if necessary
+        if reiniciar_pesos or not self.trained or self.pesos is None:
+            self.pesos = np.random.uniform(-1, 1, entr.shape[1])
 
-#     def clasifica(self,E):
+        # Normalize the data if needed
+        entr = self.__normalize(entr)
 
+        # Calculate the number of batches
+        num_batches = int(np.ceil(entr.shape[0] / self.batch_tam))
 
-#         ......
-        
+        print("\n\nTraining the classifier...")
+        for epoch in range(n_epochs):
+            # Calculate the learning rate for the current epoch
+            printProgressBar(epoch + 1, n_epochs, prefix = 'Training progress: ', suffix = 'Complete', length = 50)
+            temp_rate = self.__new_rate(epoch)
+            pesos_temp = self.pesos.copy()
+            # Iterate over the batches
+            for batch_index in np.random.permutation(num_batches):
+                # Define the start and end index for the current batch
+                start_index = batch_index * self.batch_tam
+                if start_index >= entr.shape[0]: break
+                end_index = min((batch_index + 1) * self.batch_tam, entr.shape[0])
+                
+                # Slice the batch from the dataset
+                entr_batch = entr[start_index:end_index]
+                clas_entr_batch = clas_entr[start_index:end_index]
+                P = len(entr_batch)
+                
+                # Calculate the weight updates for the current batch
+                for i in range(len(pesos_temp)):
+                    gradient = entr_batch[:, i].dot(clas_entr_batch - entr_batch.dot(pesos_temp))
+                    # Here I experienced extreme values for the gradient, which caused the weights to explode.
+                    # To prevent this, I am clipping the gradient to a value between -1 and 1.
+                    self.pesos[i] += temp_rate * np.clip(gradient, -1, 1)
+                    
+        # Set the trained flag to True
+        self.trained = True
+
+    def clasifica_prob(self,E):
+        '''
+        This method returns the array of corresponding probabilities of belonging
+        to the positive class (the one that has been taken as class 1), for each
+        example of a new array E of examples.
+
+        param E: the examples to predict analyze the prediction probabilities for
+        return: the array of corresponding probabilities of belonging to the positive class
+        '''
+        if not self.trained: raise ClasificadorNoEntrenado()
+        # Normalize the data if needed
+        E = self.__normalize(E)
+        # Calculate the probabilities
+        return 1 / (1 + np.exp(-E.dot(self.pesos)))
+
+    def clasifica(self,E):
+        '''
+        This method returns an array with the corresponding classes that are predicted
+        for each example of a new array E of examples. The class must be one of the
+        original classes of the problem (for example, "republican" or "democrat" in
+        the votes problem).
+
+        param E: the examples to predict
+        return: an array with the corresponding classes that are predicted for each example
+        '''
+        if not self.trained: raise ClasificadorNoEntrenado()
+        # Calculating the probabilities
+        probabilities = self.clasifica_prob(E)
+        # first if text
+        if not np.issubdtype(self.classes.dtype, np.number):
+            return np.array([self.classes[0] if p <= 0.5 else self.classes[1] for p in probabilities])
+        # then if numeric
+        else: return np.array([0 if p <= 0.5 else 1 for p in probabilities])
+    
+    # -- Private methods --
+    def __new_rate(self, n):
+        '''
+        This method calculates the learning rate for the current epoch.
+
+        param current_rate: the learning rate for the previous epoch
+        param n: the current epoch
+        return: the learning rate for the current epoch
+        '''
+        return self.rate / (1 + n) if self.rate_decay else self.rate
+    def __normalize(self, X):
+        '''
+        This method normalizes the data if the normalization parameter is True.
+
+        param X: the data to normalize
+        return: the normalized data, if the normalization parameter is True. Otherwise, the data is returned as is.
+        '''
+        # Normalize the data if set to do so
+        if self.normalizacion:
+            # Calculate the mean and standard deviation for each column
+            mean = np.mean(X, axis=0)
+            std = np.std(X, axis=0)
+            # Normalize the data
+            X = (X - mean) / std
+        return X  
 
 # Explicamos a continuación cada uno de los métodos:
 
@@ -287,75 +424,11 @@ def particion_entr_prueba(X,y,test=0.20):
 
 class ClasificadorNoEntrenado(Exception): pass
 
-
-
-
-# Ejemplos de uso:
-# ----------------
-
-
-
-# CON LOS DATOS VOTOS:
-        
-#   
-
-# En primer lugar, separamos los datos en entrenamiento y prueba (los resultados pueden
-# cambiar, ya que esta partición es aleatoria)
-
-        
-# In [1]: Xe_votos,Xp_votos,ye_votos,yp_votos            
-#            =particion_entr_prueba(X_votos,y_votos)
-
-# Creamos el clasificador:
-        
-# In [2]: RLMB_votos=RegresionLogisticaMiniBatch()
-
-# Lo entrenamos sobre los datos de entrenamiento:
-
-# In [3]: RLMB_votos.entrena(Xe_votos,ye_votos)
-
-# Con el clasificador aprendido, realizamos la predicción de las clases
-# de los datos que estan en test:
-
-# In [4]: RLMB_votos.clasifica_prob(Xp_votos)
-# array([3.90234132e-04, 1.48717603e-11, 3.90234132e-04, 9.99994374e-01, 9.99347533e-01,...]) 
-        
-# In [5]: RLMB_votos.clasifica(Xp_votos)
-# Out[5]: array(['democrata', 'democrata', 'democrata','republicano',... ], dtype='<U11')
-
-# Calculamos la proporción de aciertos en la predicción, usando la siguiente 
-# función que llamaremos "rendimiento".
-
 def rendimiento(clasif,X,y):
+    '''
+    Calculates the performance of a classifier.
+    '''
     return sum(clasif.clasifica(X)==y)/y.shape[0]
-        
-# In [6]: rendimiento(RLMB_votos,Xp_votos,yp_votos)
-# Out[6]: 0.9080459770114943    
-
-# ---------------------------------------------------------------------
-
-# CON LOS DATOS DEL CÀNCER
-        
-# Hacemos un experimento similar al anterior, pero ahora con los datos del 
-# cáncer de mama, y usando normalización y disminución de la tasa         
-
-# In[7]: Xe_cancer,Xp_cancer,ye_cancer,yp_cancer           
-#           =particion_entr_prueba(X_cancer,y_cancer)
-
-
-# In[8]: RLMB_cancer=RegresionLogisticaMiniBatch(normalizacion=True,rate_decay=True)
-
-# In[9]: RLMB_cancer.entrena(Xe_cancer,ye_cancer)
-
-# In[9]: RLMB_cancer.clasifica_prob(Xp_cancer)
-# Out[9]: array([9.85046885e-01, 8.77579844e-01, 7.81826115e-07,..])
-
-# In[10]: RLMB_cancer.clasifica(Xp_cancer)
-# Out[10]: array([1, 1, 0,...])
-
-# In[11]: rendimiento(RLMB_cancer,Xp_cancer,yp_cancer)
-# Out[11]: 0.9557522123893806
-
 
 # =================================================
 # EJERCICIO 3: IMPLEMENTACIÓN DE VALIDACIÓN CRUZADA
