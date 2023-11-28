@@ -12,7 +12,7 @@ import os
 
 # CONCESIÓN DE UN PRÉSTAMO
 
-from datos import credito
+from .datos import credito
 
 X_credito=np.array([d[:-1] for d in credito.datos_con_clas])
 y_credito=np.array([d[-1] for d in credito.datos_con_clas])
@@ -32,7 +32,7 @@ y_iris=iris.target
 
 # VOTOS EN EL CONGRESO USA
 
-from datos import votos
+from .datos import votos
 X_votos=votos.datos
 y_votos=votos.clasif
 
@@ -144,6 +144,6 @@ X_train_digits, y_train_digits = load_digits(path_x_train, path_y_train, digit_h
 X_test_digits, y_test_digits = load_digits(path_x_test, path_y_test, digit_height=10)
 X_valid_digits, y_valid_digits = load_digits(path_x_valid, path_y_valid, digit_height=10)
 
-print(len(X_train_digits), len(y_train_digits))
-print(len(X_test_digits), len(y_test_digits))
-print(len(X_valid_digits), len(y_valid_digits))
+#print(len(X_train_digits), len(y_train_digits))
+#print(len(X_test_digits), len(y_test_digits))
+#print(len(X_valid_digits), len(y_valid_digits))
