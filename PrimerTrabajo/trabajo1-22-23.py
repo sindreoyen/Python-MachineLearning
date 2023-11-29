@@ -171,8 +171,8 @@ class RegresionLogisticaMiniBatch():
     inverted_classes = None
 
     # -- Constructor --
-    def __init__(self,normalizacion=False,
-                 rate=0.1,rate_decay=False,batch_tam=64,
+    def __init__(self,normalizacion:bool=False,
+                 rate:float=0.1,rate_decay=False,batch_tam:int=64,
                  pesos_iniciales=None):
         '''
         This class implements the mini-batch logistic regression classifier.
@@ -187,10 +187,11 @@ class RegresionLogisticaMiniBatch():
         '''
         self.normalizacion, self.rate, self.rate_decay, self.batch_tam, self.pesos_iniciales = \
             normalizacion, rate, rate_decay, batch_tam, pesos_iniciales
+        if not isinstance(self.batch_tam, int): self.batch_tam = int(self.batch_tam)
 
     # -- Methods -- 
     def entrena(self,entr,clas_entr,n_epochs=1000,
-                reiniciar_pesos=False):
+                reiniciar_pesos=False, print_loading=True):
         '''
         This method trains the classifier. This implementation is following based on the formula for weight
         updates using mini-batch gradient descent, as explained in the slides of the module and listed below:
@@ -236,23 +237,36 @@ class RegresionLogisticaMiniBatch():
         # Calculate the number of batches
         num_batches = int(np.ceil(entr.shape[0] / self.batch_tam))
 
-        print("\n\nTraining the classifier...")
+        if print_loading: print("\n\nTraining the classifier...")
+        
+        # Patience handling
+        best_score = float('inf')
+        best_weights = None 
+        patience = 50
+        patience_counter = 0 
+
+        def compute_validation_loss(X, y):
+            # Calculate the loss for the current weights
+            return np.sum(np.log(1 + np.exp(np.clip(-y * np.dot(X, self.pesos), -1, 1, dtype=float)))) / X.shape[0]
+
+        # Training loop
         for epoch in range(n_epochs):
+            if patience_counter >= patience: break
+
             # Calculate the learning rate for the current epoch
-            printProgressBar(epoch + 1, n_epochs, prefix = 'Training progress: ', suffix = 'Complete', length = 50)
+            if print_loading: printProgressBar(epoch + 1, n_epochs, prefix = 'Training progress: ', suffix = "of {} epochs ran".format(n_epochs), length = 50)
             temp_rate = self.__new_rate(epoch)
             pesos_temp = self.pesos.copy()
             # Iterate over the batches
             for batch_index in np.random.permutation(num_batches):
                 # Define the start and end index for the current batch
-                start_index = batch_index * self.batch_tam
+                start_index: int = batch_index * self.batch_tam
                 if start_index >= entr.shape[0]: break
-                end_index = min((batch_index + 1) * self.batch_tam, entr.shape[0])
+                end_index: int = min((batch_index + 1) * self.batch_tam, entr.shape[0])
                 
                 # Slice the batch from the dataset
                 entr_batch = entr[start_index:end_index]
                 clas_entr_batch = clas_entr[start_index:end_index]
-                P = len(entr_batch)
                 
                 # Calculate the weight updates for the current batch
                 for i in range(len(pesos_temp)):
@@ -260,11 +274,24 @@ class RegresionLogisticaMiniBatch():
                     # Here I experienced extreme values for the gradient, which caused the weights to explode.
                     # To prevent this, I am clipping the gradient to a value between -1 and 1.
                     self.pesos[i] += temp_rate * np.clip(gradient, -1, 1)
-                    
+                
+            # Calculate the validation loss for the current epoch
+            validation_loss = compute_validation_loss(entr, clas_entr)
+            # If the validation loss is lower than the best score, save the weights
+            if validation_loss < best_score:
+                best_score = validation_loss
+                best_weights = self.pesos.copy()
+                patience_counter = 0
+            # If the validation loss is higher than the best score, increase the patience counter
+            else: patience_counter += 1
+        
+
         # Set the trained flag to True
         self.trained = True
+        # Set the weights to the best weights
+        self.pesos = best_weights
 
-    def clasifica_prob(self,E):
+    def clasifica_prob(self,E) -> np.ndarray:
         '''
         This method returns the array of corresponding probabilities of belonging
         to the positive class (the one that has been taken as class 1), for each
@@ -276,8 +303,8 @@ class RegresionLogisticaMiniBatch():
         if not self.trained: raise ClasificadorNoEntrenado()
         # Normalize the data if needed
         E = self.__normalize(E)
-        # Calculate the probabilities
-        return 1 / (1 + np.exp(-E.dot(self.pesos)))
+        # Calculate the probabilities with the sigmoid function
+        return np.array([self.__sigmoid(np.dot(e, self.pesos), stable=False) for e in E], dtype=float)
 
     def clasifica(self,E):
         '''
@@ -322,7 +349,31 @@ class RegresionLogisticaMiniBatch():
             std = np.std(X, axis=0)
             # Normalize the data
             X = (X - mean) / std
-        return X  
+        return X 
+    
+    def __sigmoid(self, x, stable=False) -> float:
+        '''
+        This method calculates the sigmoid function for a value x.
+
+        param x: the value to calculate the sigmoid function for
+        return: the sigmoid of the value
+        '''
+        return float(1 / (1 + np.exp(-x))) if not stable else self.__stable_sigmoid(x)
+    def __stable_sigmoid(self, x) -> float:
+        '''
+        Numerically stable sigmoid function.
+        
+        This method was created to prevent overflow and underflow errors when calculating the sigmoid function.
+        Thus, I researched how to calculate the sigmoid function in a numerically stable way and found the
+        following article by Tim Vieira:
+        - (Vieira, 2014, "A Numerically Stable Way to Compute the Sigmoid Function", https://timvieira.github.io/blog/post/2014/02/11/exp-normalize-trick/)
+            - Accessed on 28.11.23
+        
+        param x: the value to calculate the sigmoid for
+        return: the sigmoid of the value
+        '''
+        if x >= 0: return float(1 / (1 + np.exp(-x)))
+        else: float(np.exp(x) / (1 + np.exp(x)))
 
 # Explicamos a continuación cada uno de los métodos:
 
@@ -445,7 +496,7 @@ def rendimiento(clasif,X,y):
 # Definir una función: 
 
 #  rendimiento_validacion_cruzada(clase_clasificador,params,X,y,n=5)
-def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5):
+def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5, grid_search=False):
     '''
     This function calculates the average performance of a classifier, using the cross validation technique
     with n partitions. The arrays X and y are the data and the expected classification, respectively. The
@@ -463,6 +514,7 @@ def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5):
     '''
     # Check if the parameters are valid
     if n < 2: raise ValueError("The number of partitions must be at least 2")
+    if n > len(X): raise ValueError("The number of partitions must be less than the number of examples")
     if len(X) != len(y): raise ValueError("The length of X and y must be the same")
 
     # Partitioning the data using the particion_entr_prueba function
@@ -483,8 +535,8 @@ def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5):
         # Keeping the current partitions as holdout for the performance calculation
         X_train = np.concatenate(np.delete(X_partitions, i, axis=0))
         y_train = np.concatenate(np.delete(y_partitions, i, axis=0))
-        classifier.entrena(X_train, y_train)
-        print("Training", "#", i + 1, "done")
+        classifier.entrena(X_train, y_train, print_loading = not grid_search)
+        if not grid_search: print("Training", "#", i + 1, "done")
         # Calculate the performance for the current partition
         performances[i] = rendimiento(classifier, X_partitions[i], y_partitions[i])
     
@@ -555,7 +607,93 @@ def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5):
 # Mostrar el proceso realizado en cada caso, y los rendimientos finales obtenidos. 
 
 
+# =====================================
+# To answer this question, I have implemented a grid search function that
+# iterates over all possible combinations of the parameters and returns the
+# best parameters for the classifier. This function is implemented in the
+# GridSearchCV function below.
 
+def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int) -> dict:
+    '''
+    This function performs a grid search for the best parameters for a classifier
+    by using the cross validation implementation in the rendimiento_validacion_cruzada.
+    The argument param_grid is a dictionary whose keys are parameter names of the
+    classifier's constructor and the values associated with those keys are the values
+    of those parameters to call the constructor. The argument X is the data and the
+    argument y is the expected classification.
+
+    param clase_clasificador: the name of the class that implements the classifier
+    param param_grid: a dictionary whose keys are parameter names of the classifier's
+                      constructor and the values associated with those keys are the
+                      values of those parameters to call the constructor
+    param X: the data
+    param y: the expected classification
+    param k: the number of partitions for the cross validation
+    '''
+    # Check if the parameters are valid
+    if len(X) != len(y): raise ValueError("The length of X and y must be the same")
+
+    # Init the best parameters
+    best_params: dict = None
+    best_performance = 0
+
+    # Finding all possible combinations of the parameters
+    param_combinations = np.array(np.meshgrid(*param_grid.values())).T.reshape(-1, len(param_grid))
+    print("Iterating over", len(param_combinations), "combinations of parameters")
+    print("With k =", k, "partitions", "this means a total of", len(param_combinations) * k, "trainings")
+    print("Please wait...")
+
+    # Iterating over the combinations
+    for i, params in enumerate(param_combinations):
+        printProgressBar(i + 1, len(param_combinations), prefix = 'Grid search progress: ', suffix = 'Complete', length = 50)
+        # Create a dictionary with the current parameters
+        params_dict = dict(zip(param_grid.keys(), params))
+        # Calculate the performance for the current parameters
+        performance = rendimiento_validacion_cruzada(clase_clasificador, params_dict, X, y, k, grid_search=True)
+        # Check if the current parameters are the best ones
+        if performance > best_performance:
+            best_params = params_dict
+            best_performance = performance
+
+    # Return the best parameters
+    print("Grid search finished")
+    print("Best parameters:", best_params, "| With a performance of: ", best_performance)
+    return best_params
+        
+# The params to use for the grid search analysis
+params = {
+    "normalizacion": [True, False],
+    "rate": [0.1, 0.01, 0.001, 0.0001],
+    "rate_decay": [True, False],
+    "batch_tam": [8, 16, 32, 64, 128]
+}
+
+from datos_trabajo_aa import carga_datos as datos
+
+# Below are the results that I obtained for each dataset. I have commented the
+# code to avoid running it again, since it takes a long time to finish.
+# Note that the results may vary slightly due to the randomness of the
+# partitioning of the data. Moreover, the amount of params for the grid search
+# could have been increased to obtain better results, but it would have taken
+# even longer to finish.
+# I think as a proof of concept, the results are good enough.
+
+# Votos Results
+def run_votos_grid_search():
+    Xe_votos, _, ye_votos, _ = particion_entr_prueba(datos.X_votos, datos.y_votos)
+    return GridSearchCV(RegresionLogisticaMiniBatch, params, Xe_votos, ye_votos, 4)
+votos_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 32}
+# Out: Grid search finished
+# Out: Best parameters: {'normalizacion': 1.0, 'rate': 0.01, 'rate_decay': 0.0, 'batch_tam': 32.0} | With a performance of:  0.9308271670190275
+
+# Cancer Results
+def run_cancer_grid_search():
+    Xe_cancer, _, ye_cancer, _ = particion_entr_prueba(datos.X_cancer, datos.y_cancer)
+    return GridSearchCV(RegresionLogisticaMiniBatch, params, Xe_cancer, ye_cancer, 4)
+#run_cancer_grid_search()
+cancer_best_params = {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 16}
+# Out: Grid search finished
+# Out: Best parameters: {'normalizacion': 1.0, 'rate': 0.1, 'rate_decay': 1.0, 'batch_tam': 32.0}
 
 # =====================================
 # EJERCICIO 5: CLASIFICACIÓN MULTICLASE

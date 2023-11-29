@@ -55,7 +55,7 @@ class TestExercise2(unittest.TestCase):
         # Votos tests
         Xe_votos, Xp_votos, ye_votos, yp_votos = trabajo.particion_entr_prueba(datos.X_votos, datos.y_votos)
 
-        RLMB_votos = trabajo.RegresionLogisticaMiniBatch(normalizacion = True, rate_decay = True, batch_tam = 12)
+        RLMB_votos = trabajo.RegresionLogisticaMiniBatch(**trabajo.votos_best_params)
         self.assertRaises(Exception, RLMB_votos.clasifica, Xp_votos)
         RLMB_votos.entrena(Xe_votos, ye_votos)
         classification = RLMB_votos.clasifica(Xp_votos)
@@ -67,7 +67,7 @@ class TestExercise2(unittest.TestCase):
         # Cancer tests
         Xe_cancer, Xp_cancer, ye_cancer, yp_cancer = trabajo.particion_entr_prueba(datos.X_cancer, datos.y_cancer)
 
-        RLMB_cancer = trabajo.RegresionLogisticaMiniBatch(normalizacion=True, rate_decay=True)
+        RLMB_cancer = trabajo.RegresionLogisticaMiniBatch(**trabajo.cancer_best_params)
         self.assertRaises(Exception, RLMB_cancer.clasifica, Xp_cancer)
         RLMB_cancer.entrena(Xe_cancer, ye_cancer)
         classification = RLMB_cancer.clasifica(Xp_cancer)
