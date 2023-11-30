@@ -304,11 +304,7 @@ class RegresionLogisticaMiniBatch():
         if not self.trained: raise ClasificadorNoEntrenado()
         # Calculating the probabilities
         probabilities = self.clasifica_prob(E)
-        # first if text
-        if not np.issubdtype(self.classes.dtype, np.number):
-            return np.array([self.classes[0] if p <= 0.5 else self.classes[1] for p in probabilities])
-        # then if numeric
-        else: return np.array([0 if p <= 0.5 else 1 for p in probabilities])
+        return np.array([self.classes[0] if p <= 0.5 else self.classes[1] for p in probabilities])
     
     # -- Private methods --
     def __new_rate(self, n):
@@ -442,7 +438,7 @@ def rendimiento(clasif,X,y):
 # Definir una función: 
 
 #  rendimiento_validacion_cruzada(clase_clasificador,params,X,y,n=5)
-def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5, grid_search=False):
+def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5, n_epochs=1000, grid_search=False):
     '''
     This function calculates the average performance of a classifier, using the cross validation technique
     with n partitions. The arrays X and y are the data and the expected classification, respectively. The
@@ -456,6 +452,8 @@ def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5, grid_s
     param X: the data
     param y: the expected classification
     param n: the number of partitions
+    param n_epochs: the number of epochs for the training
+    param grid_search: if True, the function will not print the progress of the training
     return: the average performance of the classifier
     '''
     # Check if the parameters are valid
@@ -481,7 +479,7 @@ def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5, grid_s
         # Keeping the current partitions as holdout for the performance calculation
         X_train = np.concatenate(np.delete(X_partitions, i, axis=0))
         y_train = np.concatenate(np.delete(y_partitions, i, axis=0))
-        classifier.entrena(X_train, y_train, print_loading = not grid_search)
+        classifier.entrena(X_train, y_train, print_loading = not grid_search, n_epochs=n_epochs)
         if not grid_search: print("Training", "#", i + 1, "done")
         # Calculate the performance for the current partition
         performances[i] = rendimiento(classifier, X_partitions[i], y_partitions[i])
@@ -560,7 +558,7 @@ def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5, grid_s
 # GridSearchCV function below.
 
 def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int,
-                 saveFile:str=None) -> dict:
+                 n_epochs:int=1000, saveFile:str=None) -> dict:
     '''
     This function performs a grid search for the best parameters for a classifier
     by using the cross validation implementation in the rendimiento_validacion_cruzada.
@@ -576,6 +574,7 @@ def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int,
     param X: the data
     param y: the expected classification
     param k: the number of partitions for the cross validation
+    param n_epochs: the number of epochs for the training
     param saveFile: if not None, the results will be saved to a file with the given name
     '''
     # Check if the parameters are valid
@@ -598,7 +597,7 @@ def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int,
         # Create a dictionary with the current parameters
         params_dict = dict(zip(param_grid.keys(), params))
         # Calculate the performance for the current parameters
-        performance = rendimiento_validacion_cruzada(clase_clasificador, params_dict, X, y, k, grid_search=True)
+        performance = rendimiento_validacion_cruzada(clase_clasificador, params_dict, X, y, k, grid_search=True, n_epochs=n_epochs)
         # Check if the current parameters are the best ones
         if performance > best_performance:
             best_params = params_dict
@@ -629,13 +628,12 @@ def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int,
 
 from datos_trabajo_aa import carga_datos as datos
 
-# Below are the results that I obtained for each dataset. I have commented the
-# code to avoid running it again, since it takes a long time to finish.
-# Note that the results may vary slightly due to the randomness of the
-# partitioning of the data. Moreover, the amount of params for the grid search
-# could have been increased to obtain better results, but it would have taken
-# even longer to finish.
-# I think as a proof of concept, the results are good enough.
+# To solve the exercise and find the best parameters for each dataset, I have
+# used the GridSearchCV function defined above. The results are shown below.
+# You can also find the results in the GridSearchResults folder.
+# If you want to run the searches again, see the main function at the bottom of
+# this file. However, they do take quite long to run, so I recommend using the
+# results I have already obtained.
 
 ## Votos Grid Search ##
 # The params to use for the grid search analysis
@@ -650,9 +648,11 @@ v_params = {
 }
 def run_votos_grid_search():
     return GridSearchCV(RegresionLogisticaMiniBatch, v_params, Xe_votos, ye_votos, 4, "votos")
-votos_best_params = {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 16}  # The results
+votos_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 128}  # The results
+# Best parameters: {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 128, 'X_valid': None, 'y_valid': None}
+# With a performance of: 0.9482029598308668
 
-## Cancer Grid Search ##
+## Breast-cancer dataset Grid Search ##
 # The params to use for the grid search analysis
 Xe_cancer, Xp_cancer, ye_cancer, yp_cancer = particion_entr_prueba(datos.X_cancer, datos.y_cancer)
 c_params = {
@@ -665,20 +665,28 @@ c_params = {
 }
 def run_cancer_grid_search():
     return GridSearchCV(RegresionLogisticaMiniBatch, c_params, Xe_cancer, ye_cancer, 4, "cancer_dataset")
-cancer_best_params = {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 16, 'X_valid': Xp_cancer, 'y_valid': yp_cancer} # The results
+# Best parameters: {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 8, 'X_valid': Yes, 'y_valid': Yes}
+# With a performance of: 0.918859649122807
+cancer_best_params = {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 8, 'X_valid': Xp_cancer, 'y_valid': yp_cancer} # The results
 
 ## IMDB Grid Search ##
 Xe_imdb, Xp_imdb, ye_imdb, yp_imdb = datos.X_train_imdb, datos.X_test_imdb, datos.y_train_imdb, datos.y_test_imdb
 i_params = {
     "normalizacion": [True],
     "rate": [1e-1, 1e-2, 1e-3],
+    "rate_decay": [True, False],
     "batch_tam": [32, 64, 128],
     "X_valid": [Xp_imdb, None], 
     "y_valid": [yp_imdb]
 }
 def run_imdb_grid_search():
-    return GridSearchCV(RegresionLogisticaMiniBatch, i_params, Xe_imdb, ye_imdb, 4, "imdb")
-    
+    # Running with fewer epochs due to the size of the dataset
+    return GridSearchCV(clase_clasificador=RegresionLogisticaMiniBatch, param_grid=i_params, 
+                        X=Xe_imdb, y=ye_imdb, k=4, saveFile="imdb", n_epochs=50)
+# Best parameters: {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 128, 'X_valid': None, 'y_valid': None}
+# With a performance of: 0.5734999999999999
+imdb_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 128} # The results
+
 # =====================================
 # EJERCICIO 5: CLASIFICACIÓN MULTICLASE
 # =====================================
