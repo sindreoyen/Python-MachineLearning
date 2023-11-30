@@ -214,15 +214,13 @@ class RegresionLogisticaMiniBatch():
         param print_loading: if True, a progress bar is printed to the console
         '''
         # Create numeric mapping for the classes
-        unique_classes = np.unique(clas_entr)
-        if len(unique_classes) != 2: raise ValueError("The number of classes must be 2")
+        self.classes = np.sort(np.unique(clas_entr))
+        if len(self.classes) != 2: raise ValueError("The number of classes must be 2")
         # If the classes are text values, map them to numeric values
         if not np.issubdtype(clas_entr.dtype, np.number):
-            self.classes = np.sort(unique_classes)
             self.inverted_classes = { v: k for k, v in enumerate(self.classes) }
-            clas_entr = np.array([self.inverted_classes[c] for c in clas_entr])
+            clas_entr = np.array([self.inverted_classes[c] for c in clas_entr], dtype=int)
             self.y_valid = np.array([self.inverted_classes[c] for c in self.y_valid]) if self.y_valid is not None else self.y_valid
-        else: self.classes = unique_classes
 
         # Initialize weights if necessary
         if reiniciar_pesos or not self.trained or self.pesos is None:
@@ -708,42 +706,73 @@ imdb_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'b
  
 
 class RegresionLogisticaOvR():
+    classifiers = None
 
     def __init__(self,normalizacion=False,rate=0.1,rate_decay=False,
-                 batch_tam=64):
-        return None
+                 batch_tam=64, X_valid=None, y_valid=None):
+        '''
+        This class implements the One vs Rest technique for multiclass classification.
+
+        param normalizacion: indicates if the data should be normalized
+        param rate: the learning rate. Defines the size of the steps taken in the gradient descent
+        param rate_decay: indicates if the learning rate should decrease in each epoch
+        param batch_tam: the size of the mini-batches
+        '''
+        self.normalizacion, self.rate, self.rate_decay, self.batch_tam, self.X_valid, self.y_valid = \
+            normalizacion, rate, rate_decay, batch_tam, X_valid, y_valid
          
     def entrena(self,entr,clas_entr,n_epochs=1000):
-        return None
+        '''
+        This method trains the classifier. This implementation uses the OvA technique, meaning
+        that the multiple classes are converted into multiple binary classification problems.
+        The classifier is trained for each of these problems, and the class with the highest
+        probability is chosen as the predicted class.
+        To train the classifier, the method uses the RegresionLogisticaMiniBatch class defined
+        in the previous exercise.
+
+        param entr: the training data
+        param clas_entr: the classification values tied to the training data
+        param n_epochs: the number of epochs for the training
+        '''
+        # Create numeric mapping for the classes
+        self.classes = np.sort(np.unique(clas_entr)).astype(int)
+        # If the classes are text values, map them to numeric values
+        if not np.issubdtype(clas_entr.dtype, np.number):
+            self.inverted_classes = { v: k for k, v in enumerate(self.classes) }
+            clas_entr = np.array([self.inverted_classes[c] for c in clas_entr], dtype=int)
+
+        # Initialize the classifiers
+        self.classifiers = {}
+        # Train a classifier for each class
+        for c in self.classes:
+            # Create a binary classification problem for the current class
+            binary_clas_entr = np.array([1 if c == c_ else 0 for c_ in clas_entr], dtype=int)
+            # Init the classifier
+            self.classifiers[c] = RegresionLogisticaMiniBatch(normalizacion=self.normalizacion, rate=self.rate,
+                                                              rate_decay=self.rate_decay, batch_tam=self.batch_tam,
+                                                              X_valid=self.X_valid, y_valid=self.y_valid)
+            # Train the classifier
+            self.classifiers[c].entrena(entr, binary_clas_entr, n_epochs=n_epochs)
+            # Print the progress
+            print("Training", c, "done")
+        print(self.classes)
 
     def clasifica(self,E):
-        return None
-        
+        '''
+        This method returns an array with the corresponding classes that are predicted
+        for each example of a new array E of examples. The class must be one of the
+        original classes of the problem (for example, "republican" or "democrat" in
+        the problem of votes).
 
-
-#  Los parámetros de los métodos significan lo mismo que en el
-#  apartado anterior.
-
-#  Un ejemplo de sesión, con el problema del iris:
-
-
-# --------------------------------------------------------------------
-
-# In[1] Xe_iris,Xp_iris,ye_iris,yp_iris          
-#            =particion_entr_prueba(X_iris,y_iris,test=1/3)
-
-# >>> rl_iris=RL_OvR(rate=0.001,batch_tam=20)
-
-# >>> rl_iris.entrena(Xe_iris,ye_iris)
-
-# >>> rendimiento(rl_iris,Xe_iris,ye_iris)
-# 0.9797979797979798
-
-# >>> rendimiento(rl_iris,Xp_iris,yp_iris)
-# >>> 0.9607843137254902
-# --------------------------------------------------------------------
-
-
+        param E: the examples to predict
+        return: an array with the corresponding classes that are predicted for each example
+        '''
+        if self.classifiers is None: raise ClasificadorNoEntrenado()
+        # Predict the class for each example
+        classed_predictions = np.array([self.classifiers[c].clasifica_prob(E) for c in self.classes])
+        # Return the class with the highest probability
+        pred = np.array([self.classes[np.argmax(p)] for p in classed_predictions.T])
+        return pred
 
 
 # ==============================================
@@ -764,10 +793,53 @@ class RegresionLogisticaOvR():
 # "codificación one-hot", descrita en el tema "Preprocesado e ingeniería de características".
 # Se pide implementar esta transformación (directamete, SIN USAR Scikt Learn ni Pandas). 
 
+class OneHotEncoder():
+    def __init__(self):
+        self.categories = None
+        self.transform_dict = None
 
-     
-                
+    def fit(self, X):
+        '''
+        The fit method separates the categories of each feature in the dataset.
+        It creates a list of arrays, where each array contains the categories of
+        the corresponding feature. This list is stored in the categories attribute.
 
+        param X: the dataset
+        '''
+        self.categories = [np.unique(X[:, i]) for i in range(X.shape[1])]
+        # Init the transform dictionary
+        self.transform_dict = {}
+        for i, categories in enumerate(self.categories):
+            # Create a dictionary with the categories as keys and the index as value
+            self.transform_dict[i] = { c: j for j, c in enumerate(categories) }
+        return self
+
+    def transform(self, X):
+        '''
+        The transform method transforms the dataset into a one hot encoded dataset.
+        It uses the categories attribute to know which categories are present in each
+        feature. The method returns the one hot encoded dataset.
+
+        param X: the dataset
+        '''
+        # Check if the categories have been initialized
+        if self.categories is None: raise ValueError("The OneHotEncoder has not been fitted yet")
+        # Init the transformed dataset
+        transformed_X = X.copy()
+        for i in range(X.shape[1]):
+            # Transform the current feature
+            transformed_X[:, i] = np.array([self.transform_dict[i][c] for c in X[:, i]], dtype=int)
+        return transformed_X
+
+    def fit_transform(self, X):
+        '''
+        The fit_transform method is a combination of the fit and transform methods.
+        It returns the one hot encoded dataset.
+
+        param X: the dataset
+        '''
+        self.fit(X)
+        return self.transform(X)
 
 # ---------------------------------------------------------
 # 6.2) Clasificación de imágenes de dígitos escritos a mano

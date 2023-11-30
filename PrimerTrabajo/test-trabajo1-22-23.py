@@ -101,6 +101,35 @@ class TestExercise3(unittest.TestCase):
 
         print(u'\n\n\u2714', "test_rendimiento_validacion_cruzada passed\n\n")
 
+class TestExercise5(unittest.TestCase):
+    def test_ovr(self):
+        print("\n[ #4 ] Running test_ovr...")
+        Xe_iris,Xp_iris,ye_iris,yp_iris = trabajo.particion_entr_prueba(datos.X_iris, datos.y_iris, test=0.3)
+
+        rl_iris=trabajo.RegresionLogisticaOvR(normalizacion=True, rate=0.01, rate_decay=False, batch_tam=4, X_valid=Xp_iris, y_valid=yp_iris)
+
+        rl_iris.entrena(Xe_iris,ye_iris, n_epochs=1500)
+        e_performance = trabajo.rendimiento(rl_iris,Xe_iris,ye_iris)
+        p_performance = trabajo.rendimiento(rl_iris,Xp_iris,yp_iris)
+        print("OvR Iris performance (training, test): ", e_performance, p_performance)
+        self.assertTrue(e_performance > 0.75)
+        self.assertTrue(p_performance > 0.75)
+
+        print(u'\n\n\u2714', "test_ovr passed\n\n")
+
+class TestExercise6(unittest.TestCase):
+    def test_onehotencoder(self):
+        print("\n[ #5 ] Running test_onehotencoder...")
+        X_credito = datos.X_credito
+
+        # Initing the encoder
+        onehot = trabajo.OneHotEncoder()
+        X_credito_transformed = onehot.fit_transform(X_credito)
+        self.assertTrue(X_credito_transformed.shape == X_credito.shape)
+
+        print(u'\n\n\u2714', "test_onehotencoder passed\n\n")
+
+    
 
 if __name__ == '__main__':
     unittest.main()
