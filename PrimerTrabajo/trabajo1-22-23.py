@@ -244,7 +244,7 @@ class RegresionLogisticaMiniBatch():
             if patience_counter >= self.patience and self.patience > 0: break
             # Calculate the learning rate for the current epoch
             if print_loading: printProgressBar(epoch + 1, n_epochs, prefix = 'Training progress: ', suffix = "of {} epochs ran".format(n_epochs), length = 30)
-            temp_rate = self.__new_rate(epoch)
+            if self.rate_decay: self.rate = self.__new_rate(epoch)
             # Iterate over the batches
             for batch_index in np.random.permutation(num_batches):
                 # Define the start and end index for the current batch
@@ -261,7 +261,7 @@ class RegresionLogisticaMiniBatch():
                     gradient = entr_batch[:, i].dot(clas_entr_batch - entr_batch.dot(self.pesos))
                     # Here I experienced extreme values for the gradient, which caused the weights to explode.
                     # To prevent this, I am clipping the gradient to a value between -1 and 1.
-                    self.pesos[i] += temp_rate * np.clip(gradient, -1, 1)
+                    self.pesos[i] += self.rate * np.clip(gradient, -1, 1)
             
             if self.patience > 0 and self.X_valid is not None and self.y_valid is not None:
                 # Calculate the loss for the current epoch
@@ -288,9 +288,8 @@ class RegresionLogisticaMiniBatch():
         if not self.trained and not for_early_stop: raise ClasificadorNoEntrenado()
         # Normalize the data if needed
         E = normalize(E) if self.normalizacion else E
-        pesos = normalize(self.pesos) if self.normalizacion else self.pesos
         # Calculate the probabilities with the sigmoid function
-        return np.array([sigmoid(np.dot(e, pesos), stable=False) for e in E], dtype=float)
+        return np.array([sigmoid(np.dot(e, self.pesos), stable=False) for e in E], dtype=float)
 
     def clasifica(self,E):
         '''
@@ -320,7 +319,7 @@ class RegresionLogisticaMiniBatch():
         param n: the current epoch
         return: the learning rate for the current epoch
         '''
-        return self.rate / (1 + n) if self.rate_decay else self.rate
+        return self.rate / (1 + n)
 
 # Explicamos a continuación cada uno de los métodos:
 
@@ -560,7 +559,8 @@ def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5, grid_s
 # best parameters for the classifier. This function is implemented in the
 # GridSearchCV function below.
 
-def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int) -> dict:
+def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int,
+                 saveFile:str=None) -> dict:
     '''
     This function performs a grid search for the best parameters for a classifier
     by using the cross validation implementation in the rendimiento_validacion_cruzada.
@@ -576,6 +576,7 @@ def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int) -> dict:
     param X: the data
     param y: the expected classification
     param k: the number of partitions for the cross validation
+    param saveFile: if not None, the results will be saved to a file with the given name
     '''
     # Check if the parameters are valid
     if len(X) != len(y): raise ValueError("The length of X and y must be the same")
@@ -606,6 +607,24 @@ def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int) -> dict:
     # Return the best parameters
     print("Grid search finished")
     print("Best parameters:", best_params, "| With a performance of: ", best_performance)
+
+    # Save the results to a file
+    if saveFile is not None:
+        import os
+        from datetime import datetime
+        # Create a folder for the results
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        results_path = os.path.join(dir_path, "GridSearchResults")
+        if not os.path.exists(results_path): os.makedirs(results_path)
+        # Save the results to the file
+        with open(os.path.join(results_path, f"{saveFile}.txt"), "w") as f:
+            f.write(f"Grid search finished for {saveFile}" + "\n")
+            f.write("Date: " + datetime.now().strftime("%d/%m/%Y %H:%M:%S") + "\n")
+            f.write("Best parameters: " + str(best_params) + "\n")
+            f.write("With a performance of: " + str(best_performance) + "\n")
+            f.write("With k = " + str(k) + " partitions" + "\n")
+            f.write("With " + str(len(param_combinations)) + " combinations of parameters" + "\n")
+            f.write("With a total of " + str(len(param_combinations) * k) + " trainings" + "\n")
     return best_params
 
 from datos_trabajo_aa import carga_datos as datos
@@ -625,13 +644,13 @@ v_params = {
     "normalizacion": [True],
     "rate": [1e-1, 1e-2, 1e-3, 1e-4],
     "rate_decay": [True, False],
-    "batch_tam": [4, 8, 16, 32, 64],
+    "batch_tam": [8, 16, 32, 64, 128],
     "X_valid": [Xp_votos, None],
     "y_valid": [yp_votos]
 }
 def run_votos_grid_search():
-    return GridSearchCV(RegresionLogisticaMiniBatch, v_params, Xe_votos, ye_votos, 4)
-votos_best_params = {'normalizacion': True, 'rate': 0.001, 'rate_decay': False, 'batch_tam': 64}  # The results
+    return GridSearchCV(RegresionLogisticaMiniBatch, v_params, Xe_votos, ye_votos, 4, "votos")
+votos_best_params = {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 16}  # The results
 
 ## Cancer Grid Search ##
 # The params to use for the grid search analysis
@@ -640,13 +659,13 @@ c_params = {
     "normalizacion": [True],
     "rate": [1e-1, 1e-2, 1e-3, 1e-4],
     "rate_decay": [True, False],
-    "batch_tam": [8, 16, 32, 64],
+    "batch_tam": [8, 16, 32, 64, 128],
     "X_valid": [Xp_cancer, None],
     "y_valid": [yp_cancer]
 }
 def run_cancer_grid_search():
-    return GridSearchCV(RegresionLogisticaMiniBatch, c_params, Xe_cancer, ye_cancer, 4)
-cancer_best_params = {'normalizacion': True, 'rate': 0.001, 'rate_decay': False, 'batch_tam': 16, 'X_valid': Xp_cancer, 'y_valid': yp_cancer} # The results
+    return GridSearchCV(RegresionLogisticaMiniBatch, c_params, Xe_cancer, ye_cancer, 4, "cancer_dataset")
+cancer_best_params = {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 16, 'X_valid': Xp_cancer, 'y_valid': yp_cancer} # The results
 
 ## IMDB Grid Search ##
 Xe_imdb, Xp_imdb, ye_imdb, yp_imdb = datos.X_train_imdb, datos.X_test_imdb, datos.y_train_imdb, datos.y_test_imdb
@@ -658,7 +677,7 @@ i_params = {
     "y_valid": [yp_imdb]
 }
 def run_imdb_grid_search():
-    return GridSearchCV(RegresionLogisticaMiniBatch, i_params, Xe_imdb, ye_imdb, 4)
+    return GridSearchCV(RegresionLogisticaMiniBatch, i_params, Xe_imdb, ye_imdb, 4, "imdb")
     
 # =====================================
 # EJERCICIO 5: CLASIFICACIÓN MULTICLASE
@@ -780,21 +799,20 @@ class RegresionLogisticaOvR():
 # Run main 
 if __name__ == "__main__":
     ## Grid search ##
-    votos_question = input("Do you want to run the votos grid search? (y/n) ").lower()
+    run_all: bool = input("\n(1) Do you want to run all the grid searches? (y/n) ").lower() == "y"
+    votos_question = input("\n   (a) Do you want to run the votos grid search? (y/n) ").lower() if not run_all else "y"
+    cancer_question = input("\n   (b) Do you want to run the cancer grid search? (y/n) ").lower() if not run_all else "y"
+    imdb_question = input("\n   (c) Do you want to run the IMDB grid search? (y/n) ").lower() if not run_all else "y"
+    
     if votos_question == "y":
         print("\nRunning votos grid search...")
         votos_params = run_votos_grid_search()
-    
-    cancer_question = input("\nDo you want to run the cancer grid search? (y/n) ").lower()
     if cancer_question == "y":
         print("\nRunning cancer grid search...")
         cancer_params = run_cancer_grid_search()
-
-    imdb_question = input("\nDo you want to run the IMDB grid search? (y/n) ").lower()
     if imdb_question == "y":
         print("\nRunning IMDB grid search...")
         imdb_params = run_imdb_grid_search()
-        # Out: Grid search finished
 
     if votos_question == "y": print("\nVotos best params:", votos_params)
     if cancer_question == "y": print("Cancer best params:", cancer_params)
