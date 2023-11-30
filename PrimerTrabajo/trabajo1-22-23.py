@@ -42,7 +42,7 @@
 # SE PIDE USAR NUMPY EN LA MEDIDA DE LO POSIBLE. 
 
 import numpy as np
-from utils import printProgressBar
+from utils import printProgressBar, sigmoid, normalize, binary_cross_entropy
 
 # SE PENALIZARÁ el uso de bucles convencionales si la misma tarea se puede
 # hacer más eficiente con operaciones entre arrays que proporciona numpy. 
@@ -173,7 +173,9 @@ class RegresionLogisticaMiniBatch():
     # -- Constructor --
     def __init__(self,normalizacion:bool=False,
                  rate:float=0.1,rate_decay=False,batch_tam:int=64,
-                 pesos_iniciales=None):
+                 pesos_iniciales=None, 
+                 epsilon:float=1e-4, patience=100,
+                 X_valid:np.ndarray=None, y_valid:np.ndarray=None):
         '''
         This class implements the mini-batch logistic regression classifier.
 
@@ -184,29 +186,22 @@ class RegresionLogisticaMiniBatch():
         param pesos_iniciales: if None, the initial weights are initialized randomly.
                                 If not, it must provide an array of weights that will
                                 be used as initial weights.
+        param epsilon: threshold for change in loss function
+        param patience: Number of epochs to wait for the loss to change less than epsilon before stopping the training.
+                        If patience is 0, the training will not stop until the number of epochs is reached.
+        param X_valid: the validation data if early stopping is used
+        param y_valid: the validation classification values if early stopping is used
         '''
-        self.normalizacion, self.rate, self.rate_decay, self.batch_tam, self.pesos_iniciales = \
-            normalizacion, rate, rate_decay, batch_tam, pesos_iniciales
+        self.normalizacion, self.rate, self.rate_decay, self.batch_tam, self.pesos_iniciales, self.epsilon, self.patience, self.X_valid, self.y_valid = \
+            normalizacion, rate, rate_decay, batch_tam, pesos_iniciales, epsilon, patience, X_valid, y_valid
         if not isinstance(self.batch_tam, int): self.batch_tam = int(self.batch_tam)
 
     # -- Methods -- 
-    def entrena(self,entr,clas_entr,n_epochs=1000,
-                reiniciar_pesos=False, print_loading=True):
+    def entrena(self,entr,clas_entr, n_epochs=1000, reiniciar_pesos=False, 
+                print_loading=True):
         '''
         This method trains the classifier. This implementation is following based on the formula for weight
         updates using mini-batch gradient descent, as explained in the slides of the module and listed below:
-
-        .. math::
-        w_i \leftarrow w_i + \alpha \sum_{k=1}^{P} x_{ji}^{(k)} (y^{(k)} - \mathbf{w} \cdot \mathbf{x}^{(k)})
-    
-        where:
-        - :math:`w_i` is the i-th weight,
-        - :math:`\alpha` is the learning rate,
-        - :math:`P` is the number of examples in each mini-batch,
-        - :math:`x_{ji}^{(k)}` is the j-th feature of the i-th example in the mini-batch,
-        - :math:`y^{(k)}` is the target output for the k-th example in the mini-batch,
-        - :math:`\mathbf{w}` is the weight vector,
-        - :math:`\mathbf{x}^{(k)}` is the feature vector of the k-th example.
 
         param entr: the training data
         param clas_entr: the classification values tied to the training data
@@ -216,6 +211,7 @@ class RegresionLogisticaMiniBatch():
                                 time the method is called. In subsequent times, the training continues from the
                                 weights calculated in the previous training. This can be useful to continue the
                                 training from a previous training, if for example new data is available.
+        param print_loading: if True, a progress bar is printed to the console
         '''
         # Create numeric mapping for the classes
         unique_classes = np.unique(clas_entr)
@@ -225,6 +221,7 @@ class RegresionLogisticaMiniBatch():
             self.classes = np.sort(unique_classes)
             self.inverted_classes = { v: k for k, v in enumerate(self.classes) }
             clas_entr = np.array([self.inverted_classes[c] for c in clas_entr])
+            self.y_valid = np.array([self.inverted_classes[c] for c in self.y_valid]) if self.y_valid is not None else self.y_valid
         else: self.classes = unique_classes
 
         # Initialize weights if necessary
@@ -232,31 +229,22 @@ class RegresionLogisticaMiniBatch():
             self.pesos = np.random.uniform(-1, 1, entr.shape[1])
 
         # Normalize the data if needed
-        entr = self.__normalize(entr)
+        entr = normalize(entr) if self.normalizacion else entr
 
         # Calculate the number of batches
         num_batches = int(np.ceil(entr.shape[0] / self.batch_tam))
 
-        if print_loading: print("\n\nTraining the classifier...")
-        
-        # Patience handling
-        best_score = float('inf')
-        best_weights = None 
-        patience = 50
-        patience_counter = 0 
-
-        def compute_validation_loss(X, y):
-            # Calculate the loss for the current weights
-            return np.sum(np.log(1 + np.exp(np.clip(-y * np.dot(X, self.pesos), -1, 1, dtype=float)))) / X.shape[0]
+        # Previous loss
+        prev_loss = 0
+        patience_counter = 0
 
         # Training loop
+        if print_loading: print("\n\nTraining the classifier...")
         for epoch in range(n_epochs):
-            if patience_counter >= patience: break
-
+            if patience_counter >= self.patience and self.patience > 0: break
             # Calculate the learning rate for the current epoch
-            if print_loading: printProgressBar(epoch + 1, n_epochs, prefix = 'Training progress: ', suffix = "of {} epochs ran".format(n_epochs), length = 50)
+            if print_loading: printProgressBar(epoch + 1, n_epochs, prefix = 'Training progress: ', suffix = "of {} epochs ran".format(n_epochs), length = 30)
             temp_rate = self.__new_rate(epoch)
-            pesos_temp = self.pesos.copy()
             # Iterate over the batches
             for batch_index in np.random.permutation(num_batches):
                 # Define the start and end index for the current batch
@@ -269,29 +257,26 @@ class RegresionLogisticaMiniBatch():
                 clas_entr_batch = clas_entr[start_index:end_index]
                 
                 # Calculate the weight updates for the current batch
-                for i in range(len(pesos_temp)):
-                    gradient = entr_batch[:, i].dot(clas_entr_batch - entr_batch.dot(pesos_temp))
+                for i in range(len(self.pesos)):
+                    gradient = entr_batch[:, i].dot(clas_entr_batch - entr_batch.dot(self.pesos))
                     # Here I experienced extreme values for the gradient, which caused the weights to explode.
                     # To prevent this, I am clipping the gradient to a value between -1 and 1.
                     self.pesos[i] += temp_rate * np.clip(gradient, -1, 1)
-                
-            # Calculate the validation loss for the current epoch
-            validation_loss = compute_validation_loss(entr, clas_entr)
-            # If the validation loss is lower than the best score, save the weights
-            if validation_loss < best_score:
-                best_score = validation_loss
-                best_weights = self.pesos.copy()
-                patience_counter = 0
-            # If the validation loss is higher than the best score, increase the patience counter
-            else: patience_counter += 1
-        
+            
+            if self.patience > 0 and self.X_valid is not None and self.y_valid is not None:
+                # Calculate the loss for the current epoch
+                prob = self.clasifica_prob(self.X_valid, for_early_stop=True)
+                curr_loss = np.mean(np.array([binary_cross_entropy(c, p) for c, p in zip(self.y_valid, prob)]), dtype=float)
+                # Check if the loss has changed less than the threshold
+                if abs(float(curr_loss) - float(prev_loss)) < self.epsilon:
+                    patience_counter += 1
+                else: patience_counter = 0
+                prev_loss = curr_loss
 
         # Set the trained flag to True
         self.trained = True
-        # Set the weights to the best weights
-        self.pesos = best_weights
 
-    def clasifica_prob(self,E) -> np.ndarray:
+    def clasifica_prob(self,E,for_early_stop:bool=False) -> np.ndarray:
         '''
         This method returns the array of corresponding probabilities of belonging
         to the positive class (the one that has been taken as class 1), for each
@@ -300,11 +285,12 @@ class RegresionLogisticaMiniBatch():
         param E: the examples to predict analyze the prediction probabilities for
         return: the array of corresponding probabilities of belonging to the positive class
         '''
-        if not self.trained: raise ClasificadorNoEntrenado()
+        if not self.trained and not for_early_stop: raise ClasificadorNoEntrenado()
         # Normalize the data if needed
-        E = self.__normalize(E)
+        E = normalize(E) if self.normalizacion else E
+        pesos = normalize(self.pesos) if self.normalizacion else self.pesos
         # Calculate the probabilities with the sigmoid function
-        return np.array([self.__sigmoid(np.dot(e, self.pesos), stable=False) for e in E], dtype=float)
+        return np.array([sigmoid(np.dot(e, pesos), stable=False) for e in E], dtype=float)
 
     def clasifica(self,E):
         '''
@@ -335,45 +321,6 @@ class RegresionLogisticaMiniBatch():
         return: the learning rate for the current epoch
         '''
         return self.rate / (1 + n) if self.rate_decay else self.rate
-    def __normalize(self, X):
-        '''
-        This method normalizes the data if the normalization parameter is True.
-
-        param X: the data to normalize
-        return: the normalized data, if the normalization parameter is True. Otherwise, the data is returned as is.
-        '''
-        # Normalize the data if set to do so
-        if self.normalizacion:
-            # Calculate the mean and standard deviation for each column
-            mean = np.mean(X, axis=0)
-            std = np.std(X, axis=0)
-            # Normalize the data
-            X = (X - mean) / std
-        return X 
-    
-    def __sigmoid(self, x, stable=False) -> float:
-        '''
-        This method calculates the sigmoid function for a value x.
-
-        param x: the value to calculate the sigmoid function for
-        return: the sigmoid of the value
-        '''
-        return float(1 / (1 + np.exp(-x))) if not stable else self.__stable_sigmoid(x)
-    def __stable_sigmoid(self, x) -> float:
-        '''
-        Numerically stable sigmoid function.
-        
-        This method was created to prevent overflow and underflow errors when calculating the sigmoid function.
-        Thus, I researched how to calculate the sigmoid function in a numerically stable way and found the
-        following article by Tim Vieira:
-        - (Vieira, 2014, "A Numerically Stable Way to Compute the Sigmoid Function", https://timvieira.github.io/blog/post/2014/02/11/exp-normalize-trick/)
-            - Accessed on 28.11.23
-        
-        param x: the value to calculate the sigmoid for
-        return: the sigmoid of the value
-        '''
-        if x >= 0: return float(1 / (1 + np.exp(-x)))
-        else: float(np.exp(x) / (1 + np.exp(x)))
 
 # Explicamos a continuación cada uno de los métodos:
 
@@ -638,7 +585,8 @@ def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int) -> dict:
     best_performance = 0
 
     # Finding all possible combinations of the parameters
-    param_combinations = np.array(np.meshgrid(*param_grid.values())).T.reshape(-1, len(param_grid))
+    from itertools import product
+    param_combinations = list(product(*param_grid.values()))
     print("Iterating over", len(param_combinations), "combinations of parameters")
     print("With k =", k, "partitions", "this means a total of", len(param_combinations) * k, "trainings")
     print("Please wait...")
@@ -659,14 +607,6 @@ def GridSearchCV(clase_clasificador, param_grid: dict, X, y, k: int) -> dict:
     print("Grid search finished")
     print("Best parameters:", best_params, "| With a performance of: ", best_performance)
     return best_params
-        
-# The params to use for the grid search analysis
-params = {
-    "normalizacion": [True, False],
-    "rate": [0.1, 0.01, 0.001, 0.0001],
-    "rate_decay": [True, False],
-    "batch_tam": [8, 16, 32, 64, 128]
-}
 
 from datos_trabajo_aa import carga_datos as datos
 
@@ -678,23 +618,48 @@ from datos_trabajo_aa import carga_datos as datos
 # even longer to finish.
 # I think as a proof of concept, the results are good enough.
 
-# Votos Results
+## Votos Grid Search ##
+# The params to use for the grid search analysis
+Xe_votos, Xp_votos, ye_votos, yp_votos = particion_entr_prueba(datos.X_votos, datos.y_votos)
+v_params = {
+    "normalizacion": [True],
+    "rate": [1e-1, 1e-2, 1e-3, 1e-4],
+    "rate_decay": [True, False],
+    "batch_tam": [4, 8, 16, 32, 64],
+    "X_valid": [Xp_votos, None],
+    "y_valid": [yp_votos]
+}
 def run_votos_grid_search():
-    Xe_votos, _, ye_votos, _ = particion_entr_prueba(datos.X_votos, datos.y_votos)
-    return GridSearchCV(RegresionLogisticaMiniBatch, params, Xe_votos, ye_votos, 4)
-votos_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 32}
-# Out: Grid search finished
-# Out: Best parameters: {'normalizacion': 1.0, 'rate': 0.01, 'rate_decay': 0.0, 'batch_tam': 32.0} | With a performance of:  0.9308271670190275
+    return GridSearchCV(RegresionLogisticaMiniBatch, v_params, Xe_votos, ye_votos, 4)
+votos_best_params = {'normalizacion': True, 'rate': 0.001, 'rate_decay': False, 'batch_tam': 64}  # The results
 
-# Cancer Results
+## Cancer Grid Search ##
+# The params to use for the grid search analysis
+Xe_cancer, Xp_cancer, ye_cancer, yp_cancer = particion_entr_prueba(datos.X_cancer, datos.y_cancer)
+c_params = {
+    "normalizacion": [True],
+    "rate": [1e-1, 1e-2, 1e-3, 1e-4],
+    "rate_decay": [True, False],
+    "batch_tam": [8, 16, 32, 64],
+    "X_valid": [Xp_cancer, None],
+    "y_valid": [yp_cancer]
+}
 def run_cancer_grid_search():
-    Xe_cancer, _, ye_cancer, _ = particion_entr_prueba(datos.X_cancer, datos.y_cancer)
-    return GridSearchCV(RegresionLogisticaMiniBatch, params, Xe_cancer, ye_cancer, 4)
-#run_cancer_grid_search()
-cancer_best_params = {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 16}
-# Out: Grid search finished
-# Out: Best parameters: {'normalizacion': 1.0, 'rate': 0.1, 'rate_decay': 1.0, 'batch_tam': 32.0}
+    return GridSearchCV(RegresionLogisticaMiniBatch, c_params, Xe_cancer, ye_cancer, 4)
+cancer_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': True, 'batch_tam': 32}#, 'X_valid': Xp_cancer, 'y_valid': yp_cancer} # The results
 
+## IMDB Grid Search ##
+Xe_imdb, Xp_imdb, ye_imdb, yp_imdb = datos.X_train_imdb, datos.X_test_imdb, datos.y_train_imdb, datos.y_test_imdb
+i_params = {
+    "normalizacion": [True],
+    "rate": [1e-1, 1e-2, 1e-3],
+    "batch_tam": [32, 64, 128],
+    "X_valid": [Xp_imdb, None], 
+    "y_valid": [yp_imdb]
+}
+def run_imdb_grid_search():
+    return GridSearchCV(RegresionLogisticaMiniBatch, i_params, Xe_imdb, ye_imdb, 4)
+    
 # =====================================
 # EJERCICIO 5: CLASIFICACIÓN MULTICLASE
 # =====================================
@@ -715,21 +680,17 @@ cancer_best_params = {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'b
 
  
 
-# class RegresionLogisticaOvR():
+class RegresionLogisticaOvR():
 
-#    def __init__(self,normalizacion=False,rate=0.1,rate_decay=False,
-#                 batch_tam=64):
-
-#          .....
+    def __init__(self,normalizacion=False,rate=0.1,rate_decay=False,
+                 batch_tam=64):
+        return None
          
-#    def entrena(self,entr,clas_entr,n_epochs=1000):
+    def entrena(self,entr,clas_entr,n_epochs=1000):
+        return None
 
-#         ......
-
-#    def clasifica(self,E):
-
-
-#         ......
+    def clasifica(self,E):
+        return None
         
 
 
@@ -813,3 +774,34 @@ cancer_best_params = {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'b
 
 
 
+# ---------------------------------------------------------
+# ---------------------------------------------------------
+# ---------------------------------------------------------
+# Run main 
+if __name__ == "__main__":
+    ## Grid search ##
+    votos_question = input("Do you want to run the votos grid search? (y/n) ").lower()
+    if votos_question == "y":
+        print("\nRunning votos grid search...")
+        votos_params = run_votos_grid_search()
+        # Out: Grid search finished
+        # Out: Best parameters: {'normalizacion': True, 'rate': 0.001, 'rate_decay': False, 'batch_tam': 64, 'X_valid': None, 'y_valid': None} 
+        #      | With a performance of:  0.9596326638477801
+    
+    cancer_question = input("\nDo you want to run the cancer grid search? (y/n) ").lower()
+    if cancer_question == "y":
+        print("\nRunning cancer grid search...")
+        cancer_params = run_cancer_grid_search()
+        # Out: Grid search finished
+        # Out: {'normalizacion': False, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 32, 'X_valid: Xp_cancer, 'y_valid': yp_cancer}
+        #      | With a performance of:  0.7171052631578947
+
+    imdb_question = input("\nDo you want to run the IMDB grid search? (y/n) ").lower()
+    if imdb_question == "y":
+        print("\nRunning IMDB grid search...")
+        imdb_params = run_imdb_grid_search()
+        # Out: Grid search finished
+
+    if votos_question == "y": print("\nVotos best params:", votos_params)
+    if cancer_question == "y": print("Cancer best params:", cancer_params)
+    if imdb_question == "y": print("IMDB best params:", imdb_params)

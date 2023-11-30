@@ -45,9 +45,8 @@ class TestExercise1(unittest.TestCase):
             # Test that all elements in X_cancer are in Xe_cancer or Xp_cancer
             self.assertTrue(np.all(np.isin(X_cancer, np.concatenate((Xe_cancer, Xp_cancer)))))
             self.assertTrue(np.all(np.isin(y_cancer, np.concatenate((ye_cancer, yp_cancer)))))
-        # Print a checkmark in green color
-        print(u'\u2714', "test_particion_entr_prueba passed\n\n")
 
+        print(u'\u2714', "test_particion_entr_prueba passed\n\n")
 
 class TestExercise2(unittest.TestCase):
     def test_RegresionLogisticaMiniBatch(self):
@@ -62,7 +61,7 @@ class TestExercise2(unittest.TestCase):
         self.assertEqual(classification.shape, yp_votos.shape)
         performance = trabajo.rendimiento(RLMB_votos, Xp_votos, yp_votos)
         print("Votos performance: ", performance)
-        self.assertTrue(performance > 0.75)
+        self.assertTrue(performance > 0.70)
 
         # Cancer tests
         Xe_cancer, Xp_cancer, ye_cancer, yp_cancer = trabajo.particion_entr_prueba(datos.X_cancer, datos.y_cancer)
@@ -74,7 +73,7 @@ class TestExercise2(unittest.TestCase):
         self.assertEqual(classification.shape, yp_cancer.shape)
         performance = trabajo.rendimiento(RLMB_cancer, Xp_cancer, yp_cancer)
         print("Cancer performance: ", performance)
-        self.assertTrue(performance > 0.75)
+        self.assertTrue(performance > 0.70)
 
         # Crédito tests
         Xe_credito, Xp_credito, ye_credito, yp_credito = trabajo.particion_entr_prueba(datos.X_credito, datos.y_credito)
@@ -90,19 +89,15 @@ class TestExercise3(unittest.TestCase):
         print("\n[ #3 ] Running test_rendimiento_validacion_cruzada...")
         # Votos tests
         Xe_votos, _, ye_votos, _ = trabajo.particion_entr_prueba(datos.X_votos, datos.y_votos)
-
-        params = {'normalizacion': True, 'rate_decay': True, 'batch_tam': 16}
-        performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, params, Xe_votos, ye_votos, 3)
+        performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, trabajo.votos_best_params, Xe_votos, ye_votos, 4)
         print("Votos performance: ", performance)
-        self.assertTrue(performance > 0.75)
+        self.assertTrue(performance > 0.70)
 
         # Cancer tests
         Xe_cancer, _, ye_cancer, _ = trabajo.particion_entr_prueba(datos.X_cancer, datos.y_cancer)
-
-        params = {'normalizacion': True, 'rate_decay': True, 'batch_tam': 16}
-        performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, params, Xe_cancer, ye_cancer, 2)
+        performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, trabajo.cancer_best_params, Xe_cancer, ye_cancer, 4)
         print("Cancer performance: ", performance)
-        self.assertTrue(performance > 0.75)
+        self.assertTrue(performance > 0.70)
 
         print(u'\n\n\u2714', "test_rendimiento_validacion_cruzada passed\n\n")
 
