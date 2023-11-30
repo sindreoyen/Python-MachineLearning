@@ -174,7 +174,7 @@ class RegresionLogisticaMiniBatch():
     def __init__(self,normalizacion:bool=False,
                  rate:float=0.1,rate_decay=False,batch_tam:int=64,
                  pesos_iniciales=None, 
-                 epsilon:float=1e-4, patience=100,
+                 epsilon:float=1e-4, patience=50,
                  X_valid:np.ndarray=None, y_valid:np.ndarray=None):
         '''
         This class implements the mini-batch logistic regression classifier.
@@ -646,7 +646,7 @@ c_params = {
 }
 def run_cancer_grid_search():
     return GridSearchCV(RegresionLogisticaMiniBatch, c_params, Xe_cancer, ye_cancer, 4)
-cancer_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': True, 'batch_tam': 32}#, 'X_valid': Xp_cancer, 'y_valid': yp_cancer} # The results
+cancer_best_params = {'normalizacion': True, 'rate': 0.001, 'rate_decay': False, 'batch_tam': 16, 'X_valid': Xp_cancer, 'y_valid': yp_cancer} # The results
 
 ## IMDB Grid Search ##
 Xe_imdb, Xp_imdb, ye_imdb, yp_imdb = datos.X_train_imdb, datos.X_test_imdb, datos.y_train_imdb, datos.y_test_imdb
@@ -784,17 +784,11 @@ if __name__ == "__main__":
     if votos_question == "y":
         print("\nRunning votos grid search...")
         votos_params = run_votos_grid_search()
-        # Out: Grid search finished
-        # Out: Best parameters: {'normalizacion': True, 'rate': 0.001, 'rate_decay': False, 'batch_tam': 64, 'X_valid': None, 'y_valid': None} 
-        #      | With a performance of:  0.9596326638477801
     
     cancer_question = input("\nDo you want to run the cancer grid search? (y/n) ").lower()
     if cancer_question == "y":
         print("\nRunning cancer grid search...")
         cancer_params = run_cancer_grid_search()
-        # Out: Grid search finished
-        # Out: {'normalizacion': False, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 32, 'X_valid: Xp_cancer, 'y_valid': yp_cancer}
-        #      | With a performance of:  0.7171052631578947
 
     imdb_question = input("\nDo you want to run the IMDB grid search? (y/n) ").lower()
     if imdb_question == "y":
