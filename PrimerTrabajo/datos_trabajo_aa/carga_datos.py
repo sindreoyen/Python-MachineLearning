@@ -113,36 +113,19 @@ def print_digit(digit):
     for line in digit:
         print("".join([{2: "+", 1: "#", 0: " "}[c] for c in line]))
 
-def load_digits(path_x: str, path_y: str, digit_height=10):
+def load_digits(path_x: str, path_y: str, digit_height=28):
     with open(path_x) as file_x, open(path_y) as file_y:
         y = [int(line.rstrip()) for line in file_y]
-        x, current_digit_lines = [], []
-        blank_line_count = 0
-
-        for line in file_x:
-            stripped_line = line.rstrip()
-
-            if stripped_line:
-                # Reset blank line count if a non-blank line is encountered
-                blank_line_count = 0
-                current_digit_lines.append([{"+": 2, "#": 1, " ": 0}[c] for c in stripped_line])
-            else:
-                blank_line_count += 1
-                # Add the digit if it has reached the expected height and is followed by blank lines
-                if len(current_digit_lines) >= digit_height and blank_line_count > 1:
-                    x.append(current_digit_lines)
-                    current_digit_lines = []
-
-        # Add the last digit if it meets the height requirement
-        if len(current_digit_lines) >= digit_height:
-            x.append(current_digit_lines)
-
-    return x, np.array(y, dtype=int)
+        X = [[[{"#": 2, "+": 1, " ": 0}[c] for c in file_x.readline().rstrip()] for _ in range(digit_height)] for _ in range(len(y))]
+        for i, x in enumerate(X):
+            for j, line in enumerate(x):
+                X[i][j] += [0] * (digit_height - len(line))
+    return np.array(X, dtype=int), np.array(y, dtype=int)
 
 # With some research of the data, the digits all appear to be min 10 in height
-X_train_digits, y_train_digits = load_digits(path_x_train, path_y_train, digit_height=10)
-X_test_digits, y_test_digits = load_digits(path_x_test, path_y_test, digit_height=10)
-X_valid_digits, y_valid_digits = load_digits(path_x_valid, path_y_valid, digit_height=10)
+X_train_digits, y_train_digits = load_digits(path_x_train, path_y_train)
+X_test_digits, y_test_digits = load_digits(path_x_test, path_y_test)
+X_valid_digits, y_valid_digits = load_digits(path_x_valid, path_y_valid)
 
 #print(len(X_train_digits), len(y_train_digits))
 #print(len(X_test_digits), len(y_test_digits))
