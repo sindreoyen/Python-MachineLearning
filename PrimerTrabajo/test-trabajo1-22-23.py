@@ -61,7 +61,8 @@ class TestExercise2(unittest.TestCase):
         self.assertEqual(classification.shape, yp_votos.shape)
         performance = trabajo.rendimiento(RLMB_votos, Xp_votos, yp_votos)
         print("Votos performance: ", performance)
-        self.assertTrue(performance > 0.70)
+        # Should be > 0.75 for acceptable performance
+        self.assertTrue(performance > 0.75)
 
         # Cancer tests
         Xe_cancer, Xp_cancer, ye_cancer, yp_cancer = trabajo.particion_entr_prueba(datos.X_cancer, datos.y_cancer)
@@ -73,7 +74,8 @@ class TestExercise2(unittest.TestCase):
         self.assertEqual(classification.shape, yp_cancer.shape)
         performance = trabajo.rendimiento(RLMB_cancer, Xp_cancer, yp_cancer)
         print("Cancer performance: ", performance)
-        self.assertTrue(performance > 0.70)
+        # Should be > 0.75 for acceptable performance
+        self.assertTrue(performance > 0.75)
 
         # Crédito tests
         Xe_credito, Xp_credito, ye_credito, yp_credito = trabajo.particion_entr_prueba(datos.X_credito, datos.y_credito)
@@ -91,13 +93,15 @@ class TestExercise3(unittest.TestCase):
         Xe_votos, _, ye_votos, _ = trabajo.particion_entr_prueba(datos.X_votos, datos.y_votos)
         performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, trabajo.votos_best_params, Xe_votos, ye_votos, 4)
         print("Votos performance: ", performance)
-        self.assertTrue(performance > 0.70)
+        # Should be > 0.75 for acceptable performance
+        self.assertTrue(performance > 0.75)
 
         # Cancer tests
         Xe_cancer, _, ye_cancer, _ = trabajo.particion_entr_prueba(datos.X_cancer, datos.y_cancer)
         performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, trabajo.cancer_best_params, Xe_cancer, ye_cancer, 4)
         print("Cancer performance: ", performance)
-        self.assertTrue(performance > 0.70)
+        # Should be > 0.75 for acceptable performance
+        self.assertTrue(performance > 0.75)
 
         print(u'\n\n\u2714', "test_rendimiento_validacion_cruzada passed\n\n")
 
@@ -112,6 +116,7 @@ class TestExercise5(unittest.TestCase):
         e_performance = trabajo.rendimiento(rl_iris,Xe_iris,ye_iris)
         p_performance = trabajo.rendimiento(rl_iris,Xp_iris,yp_iris)
         print("OvR Iris performance (training, test): ", e_performance, p_performance)
+        # Should be > 0.75 for acceptable performance
         self.assertTrue(e_performance > 0.75)
         self.assertTrue(p_performance > 0.75)
 
@@ -129,7 +134,42 @@ class TestExercise6(unittest.TestCase):
 
         print(u'\n\n\u2714', "test_onehotencoder passed\n\n")
 
+    def test_OvR_credito(self):
+        Xe_credito, Xp_credito, ye_credito, yp_credito = trabajo.particion_entr_prueba(datos.X_credito, datos.y_credito)
+        onehot = trabajo.OneHotEncoder()
+        Xe_credito = onehot.fit_transform(Xe_credito)
+        Xp_credito = onehot.transform(Xp_credito)
+
+        ## Then training the classifier
+        ovr = trabajo.RegresionLogisticaOvR(normalizacion=False, rate=1e-3, rate_decay=True, batch_tam=16, X_valid=Xp_credito, y_valid=yp_credito)
+        ovr.entrena(Xe_credito, ye_credito, n_epochs=1000)
+
+        performance = trabajo.rendimiento(ovr, Xp_credito, yp_credito)
+        print("OVR classifier performance:", performance)
+        # Should be > 0.75 for acceptable performance
+        self.assertTrue(performance > 0.75)
+
+class TestDigitDataExtract(unittest.TestCase):
+    def test_print_digit(self):
+        print("\n[ #6 ] Running test_print_digit...")
+        X = datos.X_train_digits
+        datos.print_digit(X[0])
+        self.assertEqual(X[0].shape, (28, 28))
+
+        # Print a random number and prompt the user if it is correct
+        import random
+        i = random.randint(0, len(X))
+        datos.print_digit(X[i])
+        ans = input("Is the number above a {}? (y/n)".format(datos.y_train_digits[i]))
+        self.assertTrue(ans.lower() == "y")
+        self.assertTrue(len(datos.X_train_digits) == len(datos.y_train_digits))
+        self.assertTrue(len(datos.X_test_digits) == len(datos.y_test_digits))
+        self.assertTrue(len(datos.X_valid_digits) == len(datos.y_valid_digits))
+        print(u'\n\n\u2714', "test_print_digit passed\n\n")
     
 
 if __name__ == '__main__':
-    unittest.main()
+    #unittest.main()
+    # Run test 1
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestDigitDataExtract)
+    unittest.TextTestRunner(verbosity=2).run(suite)

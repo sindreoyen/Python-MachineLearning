@@ -239,10 +239,12 @@ class RegresionLogisticaMiniBatch():
         # Training loop
         if print_loading: print("\n\nTraining the classifier...")
         for epoch in range(n_epochs):
-            if patience_counter >= self.patience and self.patience > 0: break
+            if patience_counter >= self.patience and self.patience > 0: 
+                if print_loading: print("\nEarly stopping after {} epochs".format(epoch + 1))
+                break
             # Calculate the learning rate for the current epoch
             if print_loading: printProgressBar(epoch + 1, n_epochs, prefix = 'Training progress: ', suffix = "of {} epochs ran".format(n_epochs), length = 30)
-            if self.rate_decay: self.rate = self.__new_rate(epoch)
+            temp_rate = self.__new_rate(epoch) if self.rate_decay else self.rate
             # Iterate over the batches
             for batch_index in np.random.permutation(num_batches):
                 # Define the start and end index for the current batch
@@ -259,7 +261,7 @@ class RegresionLogisticaMiniBatch():
                     gradient = entr_batch[:, i].dot(clas_entr_batch - entr_batch.dot(self.pesos))
                     # Here I experienced extreme values for the gradient, which caused the weights to explode.
                     # To prevent this, I am clipping the gradient to a value between -1 and 1.
-                    self.pesos[i] += self.rate * np.clip(gradient, -1, 1)
+                    self.pesos[i] += temp_rate * np.clip(gradient, -1, 1)
             
             if self.patience > 0 and self.X_valid is not None and self.y_valid is not None:
                 # Calculate the loss for the current epoch
@@ -683,6 +685,9 @@ def run_imdb_grid_search():
                         X=Xe_imdb, y=ye_imdb, k=4, saveFile="imdb", n_epochs=50)
 # Best parameters: {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 128, 'X_valid': None, 'y_valid': None}
 # With a performance of: 0.5734999999999999
+# This did not have the best performance, but it was also really slow to train so I had to reduce the number of epochs
+# to 50. I think that with more epochs it may have performed better.
+# But as a proof of concept, I think it is enough.
 imdb_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 128} # The results
 
 # =====================================
@@ -719,9 +724,9 @@ class RegresionLogisticaOvR():
         param batch_tam: the size of the mini-batches
         '''
         self.normalizacion, self.rate, self.rate_decay, self.batch_tam, self.X_valid, self.y_valid = \
-            normalizacion, rate, rate_decay, batch_tam, X_valid, y_valid
+            bool(normalizacion), float(rate), bool(rate_decay), int(batch_tam), X_valid, y_valid
          
-    def entrena(self,entr,clas_entr,n_epochs=1000):
+    def entrena(self,entr,clas_entr,n_epochs=1000, print_loading=True):
         '''
         This method trains the classifier. This implementation uses the OvA technique, meaning
         that the multiple classes are converted into multiple binary classification problems.
@@ -733,29 +738,31 @@ class RegresionLogisticaOvR():
         param entr: the training data
         param clas_entr: the classification values tied to the training data
         param n_epochs: the number of epochs for the training
+        param print_loading: if True, a progress bar is printed to the console
         '''
         # Create numeric mapping for the classes
-        self.classes = np.sort(np.unique(clas_entr)).astype(int)
+        self.classes = np.sort(np.unique(clas_entr))
         # If the classes are text values, map them to numeric values
         if not np.issubdtype(clas_entr.dtype, np.number):
             self.inverted_classes = { v: k for k, v in enumerate(self.classes) }
             clas_entr = np.array([self.inverted_classes[c] for c in clas_entr], dtype=int)
-
+            self.y_valid = np.array([self.inverted_classes[c] for c in self.y_valid]) if self.y_valid is not None else self.y_valid
+        
         # Initialize the classifiers
         self.classifiers = {}
         # Train a classifier for each class
-        for c in self.classes:
+        for c in np.unique(clas_entr):
             # Create a binary classification problem for the current class
             binary_clas_entr = np.array([1 if c == c_ else 0 for c_ in clas_entr], dtype=int)
+            binary_y_valid = np.array([1 if c == c_ else 0 for c_ in self.y_valid], dtype=int) if self.y_valid is not None else self.y_valid
             # Init the classifier
             self.classifiers[c] = RegresionLogisticaMiniBatch(normalizacion=self.normalizacion, rate=self.rate,
                                                               rate_decay=self.rate_decay, batch_tam=self.batch_tam,
-                                                              X_valid=self.X_valid, y_valid=self.y_valid)
+                                                              X_valid=self.X_valid, y_valid=binary_y_valid)
             # Train the classifier
-            self.classifiers[c].entrena(entr, binary_clas_entr, n_epochs=n_epochs)
+            self.classifiers[c].entrena(entr, binary_clas_entr, n_epochs=int(n_epochs), print_loading=bool(print_loading))
             # Print the progress
-            print("Training", c, "done")
-        print(self.classes)
+            if print_loading: print("Training", c, "done")
 
     def clasifica(self,E):
         '''
@@ -769,7 +776,7 @@ class RegresionLogisticaOvR():
         '''
         if self.classifiers is None: raise ClasificadorNoEntrenado()
         # Predict the class for each example
-        classed_predictions = np.array([self.classifiers[c].clasifica_prob(E) for c in self.classes])
+        classed_predictions = np.array([self.classifiers[c].clasifica_prob(E) for c in self.classifiers.keys()])
         # Return the class with the highest probability
         pred = np.array([self.classes[np.argmax(p)] for p in classed_predictions.T])
         return pred
@@ -810,11 +817,12 @@ class OneHotEncoder():
         # Init the transform dictionary
         self.transform_dict = {}
         for i, categories in enumerate(self.categories):
-            # Create a dictionary with the categories as keys and the index as value
-            self.transform_dict[i] = { c: j for j, c in enumerate(categories) }
+            # Create a dictionary with the categories as keys and the one hot encoded values as values
+            # For my encoding, I have chosen to encode each category as a number from 0 to n-1, where n is the number of categories
+            self.transform_dict[i] = { c: int(j) for j, c in enumerate(categories) }
         return self
 
-    def transform(self, X):
+    def transform(self, X) -> np.ndarray:
         '''
         The transform method transforms the dataset into a one hot encoded dataset.
         It uses the categories attribute to know which categories are present in each
@@ -828,10 +836,10 @@ class OneHotEncoder():
         transformed_X = X.copy()
         for i in range(X.shape[1]):
             # Transform the current feature
-            transformed_X[:, i] = np.array([self.transform_dict[i][c] for c in X[:, i]], dtype=int)
-        return transformed_X
+            transformed_X[:, i] = np.array([self.transform_dict[i][c] for c in X[:, i]], dtype=float)
+        return transformed_X.astype(float)
 
-    def fit_transform(self, X):
+    def fit_transform(self, X) -> np.ndarray:
         '''
         The fit_transform method is a combination of the fit and transform methods.
         It returns the one hot encoded dataset.
@@ -839,7 +847,25 @@ class OneHotEncoder():
         param X: the dataset
         '''
         self.fit(X)
-        return self.transform(X)
+        return self.transform(X).astype(float)
+
+# Credito grid search params
+Xe_credito, Xp_credito, ye_credito, yp_credito = particion_entr_prueba(datos.X_credito, datos.y_credito)
+cred_params = {
+    "normalizacion": [True, False],
+    "rate": [1e-1, 1e-2, 1e-3, 1e-4],
+    "rate_decay": [True, False],
+    "batch_tam": [8, 16, 32, 64, 128],
+    "X_valid": [OneHotEncoder().fit_transform(Xp_credito)],
+    "y_valid": [yp_credito]
+}
+def run_credito_grid_search():
+    onehot = OneHotEncoder()
+    Xe_credito_onehot = onehot.fit_transform(Xe_credito)
+    return GridSearchCV(clase_clasificador=RegresionLogisticaOvR, param_grid=cred_params, 
+                        X=Xe_credito_onehot, y=ye_credito, k=4, saveFile="credito_dataset")
+credito_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 8, 'X_valid': Xe_credito, 'y_valid': ye_credito}
+
 
 # ---------------------------------------------------------
 # 6.2) Clasificación de imágenes de dígitos escritos a mano
@@ -883,6 +909,7 @@ if __name__ == "__main__":
     votos_question = input("\n   (a) Do you want to run the votos grid search? (y/n) ").lower() if not run_all else "y"
     cancer_question = input("\n   (b) Do you want to run the cancer grid search? (y/n) ").lower() if not run_all else "y"
     imdb_question = input("\n   (c) Do you want to run the IMDB grid search? (y/n) ").lower() if not run_all else "y"
+    credito_question = input("\n   (d) Do you want to run the credito grid search? (y/n) ").lower() if not run_all else "y"
     
     if votos_question == "y":
         print("\nRunning votos grid search...")
@@ -893,7 +920,11 @@ if __name__ == "__main__":
     if imdb_question == "y":
         print("\nRunning IMDB grid search...")
         imdb_params = run_imdb_grid_search()
+    if credito_question == "y":
+        print("\nRunning credito grid search...")
+        credito_params = run_credito_grid_search()
 
     if votos_question == "y": print("\nVotos best params:", votos_params)
     if cancer_question == "y": print("Cancer best params:", cancer_params)
     if imdb_question == "y": print("IMDB best params:", imdb_params)
+    if credito_question == "y": print("Credito best params:", credito_params)
