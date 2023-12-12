@@ -803,24 +803,6 @@ class RegresionLogisticaOvR():
 class OneHotEncoder():
     def __init__(self):
         self.categories = None
-        self.transform_dict = None
-
-    def fit(self, X):
-        '''
-        The fit method separates the categories of each feature in the dataset.
-        It creates a list of arrays, where each array contains the categories of
-        the corresponding feature. This list is stored in the categories attribute.
-
-        param X: the dataset
-        '''
-        self.categories = [np.unique(X[:, i]) for i in range(X.shape[1])]
-        # Init the transform dictionary
-        self.transform_dict = {}
-        for i, categories in enumerate(self.categories):
-            # Create a dictionary with the categories as keys and the one hot encoded values as values
-            # For my encoding, I have chosen to encode each category as a number from 0 to n-1, where n is the number of categories
-            self.transform_dict[i] = { c: int(j) for j, c in enumerate(categories) }
-        return self
 
     def transform(self, X) -> np.ndarray:
         '''
@@ -833,11 +815,20 @@ class OneHotEncoder():
         # Check if the categories have been initialized
         if self.categories is None: raise ValueError("The OneHotEncoder has not been fitted yet")
         # Init the transformed dataset
-        transformed_X = X.copy()
-        for i in range(X.shape[1]):
-            # Transform the current feature
-            transformed_X[:, i] = np.array([self.transform_dict[i][c] for c in X[:, i]], dtype=float)
-        return transformed_X.astype(float)
+        transformed_X = np.empty((X.shape[0], 0), dtype=int)
+        # Iterate over the features
+        for i, feature in enumerate(X.T):
+            # Get the categories for the current feature
+            categories = self.categories[i]
+            # Init the transformed feature
+            transformed_feature = np.zeros((X.shape[0], len(categories)), dtype=int)
+            # Iterate over the categories
+            for j, category in enumerate(categories):
+                # Set the values for the current category
+                transformed_feature[:, j] = np.array([1 if c == category else 0 for c in feature], dtype=int)
+            # Append the transformed feature to the transformed dataset
+            transformed_X = np.append(transformed_X, transformed_feature, axis=1)
+        return transformed_X.astype(int)
 
     def fit_transform(self, X) -> np.ndarray:
         '''
@@ -846,17 +837,20 @@ class OneHotEncoder():
 
         param X: the dataset
         '''
-        self.fit(X)
+        self.categories = [np.sort(np.unique(X[:, i])) for i in range(X.shape[1])]
         return self.transform(X).astype(float)
 
 # Credito grid search params
 Xe_credito, Xp_credito, ye_credito, yp_credito = particion_entr_prueba(datos.X_credito, datos.y_credito)
+onehot = OneHotEncoder()
+Xe_credito_onehot = onehot.fit_transform(Xe_credito)
+Xp_credito_onehot = onehot.transform(Xp_credito)
 cred_params = {
     "normalizacion": [True, False],
     "rate": [1e-1, 1e-2, 1e-3, 1e-4],
     "rate_decay": [True, False],
     "batch_tam": [8, 16, 32, 64, 128],
-    "X_valid": [OneHotEncoder().fit_transform(Xp_credito)],
+    "X_valid": [Xp_credito_onehot],
     "y_valid": [yp_credito]
 }
 def run_credito_grid_search():
@@ -864,8 +858,7 @@ def run_credito_grid_search():
     Xe_credito_onehot = onehot.fit_transform(Xe_credito)
     return GridSearchCV(clase_clasificador=RegresionLogisticaOvR, param_grid=cred_params, 
                         X=Xe_credito_onehot, y=ye_credito, k=4, saveFile="credito_dataset")
-credito_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 8, 'X_valid': Xe_credito, 'y_valid': ye_credito}
-
+credito_best_params = {'normalizacion': False, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 128, 'X_valid': Xe_credito, 'y_valid': ye_credito}
 
 # ---------------------------------------------------------
 # 6.2) Clasificación de imágenes de dígitos escritos a mano
@@ -896,8 +889,32 @@ credito_best_params = {'normalizacion': True, 'rate': 0.01, 'rate_decay': False,
 # rate_decay para tratar de obtener un rendimiento aceptable (por encima del
 # 75% de aciertos sobre test). 
 
+X_train_digits, y_train_digits = datos.X_train_digits, datos.y_train_digits
+X_valid_digits, y_valid_digits = datos.X_valid_digits, datos.y_valid_digits
+X_test_digits, y_test_digits = datos.X_test_digits, datos.y_test_digits
+
+# Transform the datasets
+#X_train_digits = np.array([extract_features(matrix) for matrix in X_train_digits])
+#X_valid_digits = np.array([extract_features(matrix) for matrix in X_valid_digits])
+#X_test_digits = np.array([extract_features(matrix) for matrix in X_test_digits])
 
 
+def jj():
+    # Classify the digits
+    clasificador = RegresionLogisticaOvR(normalizacion=True, rate=0.01, rate_decay=False, batch_tam=16, X_valid=X_valid_digits, y_valid=y_valid_digits)
+    clasificador.entrena(X_train_digits, y_train_digits, n_epochs=2000)
+
+    # Save the trained classifier
+    import pickle
+    with open("digits_classifier.pickle", "wb") as f:
+        pickle.dump(clasificador, f)
+    # Load the trained classifier
+    # import pickle
+    # with open("digits_classifier.pickle", "rb") as f:
+    #     clasificador = pickle.load(f)
+    print("Performance:", rendimiento(clasificador, X_test_digits, y_test_digits))
+
+##jj()
 
 # ---------------------------------------------------------
 # ---------------------------------------------------------

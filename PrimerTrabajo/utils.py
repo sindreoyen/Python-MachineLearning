@@ -1,5 +1,6 @@
 # Print iterations progress
 # Source: (https://stackoverflow.com/questions/3173320/text-progress-bar-in-terminal-with-block-characters, accessed 28.11.23)
+# Some minor alterations were made to the code relative to the original source
 def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
     Call in a loop to create terminal progress bar
@@ -16,7 +17,7 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
     bar = fill * filledLength + '-' * (length - filledLength)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    print(f'\r{prefix} ({iteration}/{total}) |{bar}| {percent}% {suffix}', end = printEnd)
     # Print New Line on Complete
     if iteration == total: 
         print()
@@ -72,3 +73,63 @@ def __stable_sigmoid(x) -> float:
     '''
     if x >= 0: return float(1 / (1 + np.exp(-x)))
     else: float(np.exp(x) / (1 + np.exp(x)))
+
+
+## Image feature extraction
+import cv2
+
+def extract_features(matrix):
+    features = {}
+
+    # Convert the matrix to an 8-bit grayscale image
+    image = np.uint8(matrix * 255)
+
+    # Normalize the image
+    normalized_image = image / 255.0
+
+    # Aspect Ratio
+    x, y, w, h = cv2.boundingRect(image)
+    features['aspect_ratio'] = w / h if h > 0 else 0
+
+    # Find quadrant density in only the areas where there are pixels
+    # This is done by finding the bounding rectangle of the image
+    # and then cropping the image to only the area where there are pixels
+    # This is done for each quadrant
+    for i in range(2):
+        for j in range(2):
+            quadrant = normalized_image[i*14:(i+1)*14, j*14:(j+1)*14]
+            # Registering the difference between the mean of the quadrant and the mean of the cropped quadrant
+            features[f'density_q{i}{j}'] = np.mean(quadrant) - np.mean(quadrant[y:y+h, x:x+w])
+
+    # Edge Count using Canny Edge Detector
+    edges = cv2.Canny(image, 100, 200)
+    #features['edge_count'] = np.sum(edges > 0)
+
+    # Identify the contours of the cropped image to find the number of holes
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    features['holes'] = len(contours)
+
+    # Horizontal/Vertical Line Histograms
+    #features['horizontal_line_hist'] = np.sum(normalized_image, axis=1).mean()
+    #features['vertical_line_hist'] = np.sum(normalized_image, axis=0).mean()
+
+    # Compactness
+    #area = np.sum(normalized_image)
+    #perimeter = np.sum(edges)
+    #features['compactness'] = (perimeter ** 2) / area if area > 0 else 0
+
+    # Symmetry
+    #features['symmetry'] = np.sum(np.abs(normalized_image - normalized_image[::-1, ::-1]))
+
+    # Fourier Transform
+    fourier = np.fft.fft2(normalized_image)
+    features['fourier'] = np.sum(np.abs(fourier))
+
+    # Edge Density
+    #features['edge_density'] = np.sum(edges) / np.sum(normalized_image)
+
+    # Center of Mass
+    features['center_of_mass'] = np.sum(normalized_image * np.indices(normalized_image.shape)) / np.sum(normalized_image)
+
+    # More features like symmetry, edge detection, etc. can be added here
+    return np.array(list(features.values()))

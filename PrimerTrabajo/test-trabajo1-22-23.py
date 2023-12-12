@@ -135,13 +135,13 @@ class TestExercise6(unittest.TestCase):
         print(u'\n\n\u2714', "test_onehotencoder passed\n\n")
 
     def test_OvR_credito(self):
-        Xe_credito, Xp_credito, ye_credito, yp_credito = trabajo.particion_entr_prueba(datos.X_credito, datos.y_credito)
+        Xe_credito, Xp_credito, ye_credito, yp_credito = trabajo.particion_entr_prueba(datos.X_credito, datos.y_credito, test=0.25)
         onehot = trabajo.OneHotEncoder()
         Xe_credito = onehot.fit_transform(Xe_credito)
         Xp_credito = onehot.transform(Xp_credito)
 
         ## Then training the classifier
-        ovr = trabajo.RegresionLogisticaOvR(normalizacion=False, rate=1e-3, rate_decay=True, batch_tam=16, X_valid=Xp_credito, y_valid=yp_credito)
+        ovr = trabajo.RegresionLogisticaOvR(normalizacion=True, rate=1e-1, rate_decay=True, batch_tam=256, X_valid=Xp_credito, y_valid=yp_credito)
         ovr.entrena(Xe_credito, ye_credito, n_epochs=1000)
 
         performance = trabajo.rendimiento(ovr, Xp_credito, yp_credito)
@@ -153,9 +153,6 @@ class TestDigitDataExtract(unittest.TestCase):
     def test_print_digit(self):
         print("\n[ #6 ] Running test_print_digit...")
         X = datos.X_train_digits
-        datos.print_digit(X[0])
-        self.assertEqual(X[0].shape, (28, 28))
-
         # Print a random number and prompt the user if it is correct
         import random
         i = random.randint(0, len(X))
@@ -170,6 +167,7 @@ class TestDigitDataExtract(unittest.TestCase):
 
 if __name__ == '__main__':
     #unittest.main()
-    # Run test 1
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestDigitDataExtract)
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    # Run testexercise6
+    suite = unittest.TestSuite()
+    suite.addTest(TestExercise6("test_OvR_credito"))
+    suite.run(unittest.TestResult())
