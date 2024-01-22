@@ -1,0 +1,7 @@
+Grid search finished for cancer_dataset
+Date: 30/11/2023 02:58:29
+Best parameters: {'normalizacion': True, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 8, 'X_valid': Yes, 'y_valid': Yes}
+With a performance of: 0.918859649122807
+With k = 4 partitions
+With 80 combinations of parameters
+With a total of 320 trainings

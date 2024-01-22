@@ -1,0 +1,7 @@
+Grid search finished for imdb
+Date: 30/11/2023 15:33:22
+Best parameters: {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 128, 'X_valid': None, 'y_valid': None}
+With a performance of: 0.5734999999999999
+With k = 4 partitions
+With 36 combinations of parameters
+With a total of 144 trainings

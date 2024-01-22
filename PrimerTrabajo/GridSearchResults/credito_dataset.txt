@@ -1,0 +1,7 @@
+Grid search finished for credito_dataset
+Date: 10/12/2023 15:35:56
+Best parameters: {'normalizacion': False, 'rate': 0.1, 'rate_decay': True, 'batch_tam': 128, 'X_valid': array, 'y_valid': array}
+With a performance of: 0.7173076923076923
+With k = 4 partitions
+With 80 combinations of parameters
+With a total of 320 trainings
