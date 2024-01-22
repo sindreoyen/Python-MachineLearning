@@ -111,22 +111,17 @@ path_y_valid = os.path.join(digits_path, "validationlabels")
 
 def print_digit(digit):
     for line in digit:
-        print("".join([{1: "#", 0.5: "+", 0: " "}[c] for c in line]))
+        print("".join([{1: "#", 0: " "}[c] for c in line]))
 
 def load_digits(path_x: str, path_y: str, digit_height=28):
     with open(path_x) as file_x, open(path_y) as file_y:
         y = [int(line.rstrip()) for line in file_y]
-        X = [[[{"#": 1, "+": 0.5, " ": 0}[c] for c in file_x.readline().rstrip()] for _ in range(digit_height)] for _ in range(len(y))]
+        X = [[[{"#": 1, "+": 1, " ": 0}[c] for c in file_x.readline().rstrip()] for _ in range(digit_height)] for _ in range(len(y))]
         for i, x in enumerate(X):
             for j, line in enumerate(x):
                 X[i][j] += [0] * (digit_height - len(line))
     return np.array(X, dtype=float), np.array(y, dtype=int)
 
-# With some research of the data, the digits all appear to be min 10 in height
 X_train_digits, y_train_digits = load_digits(path_x_train, path_y_train)
 X_test_digits, y_test_digits = load_digits(path_x_test, path_y_test)
 X_valid_digits, y_valid_digits = load_digits(path_x_valid, path_y_valid)
-
-#print(len(X_train_digits), len(y_train_digits))
-#print(len(X_test_digits), len(y_test_digits))
-#print(len(X_valid_digits), len(y_valid_digits))

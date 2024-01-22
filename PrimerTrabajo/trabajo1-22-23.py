@@ -42,7 +42,7 @@
 # SE PIDE USAR NUMPY EN LA MEDIDA DE LO POSIBLE. 
 
 import numpy as np
-from utils import printProgressBar, sigmoid, normalize, binary_cross_entropy
+from utils import printProgressBar, sigmoid, normalize, binary_cross_entropy, extract_features
 
 # SE PENALIZARÁ el uso de bucles convencionales si la misma tarea se puede
 # hacer más eficiente con operaciones entre arrays que proporciona numpy. 
@@ -893,28 +893,18 @@ X_train_digits, y_train_digits = datos.X_train_digits, datos.y_train_digits
 X_valid_digits, y_valid_digits = datos.X_valid_digits, datos.y_valid_digits
 X_test_digits, y_test_digits = datos.X_test_digits, datos.y_test_digits
 
-# Transform the datasets
-#X_train_digits = np.array([extract_features(matrix) for matrix in X_train_digits])
-#X_valid_digits = np.array([extract_features(matrix) for matrix in X_valid_digits])
-#X_test_digits = np.array([extract_features(matrix) for matrix in X_test_digits])
+# Extracting features from the image for faster training
+# Save one image
+feature = extract_features(X_train_digits[0], True)
+X_train_digits = np.array([extract_features(matrix) for matrix in X_train_digits])
+X_valid_digits = np.array([extract_features(matrix) for matrix in X_valid_digits])
+X_test_digits = np.array([extract_features(matrix) for matrix in X_test_digits])
 
-
-def jj():
+def performance_digits():
     # Classify the digits
-    clasificador = RegresionLogisticaOvR(normalizacion=True, rate=0.01, rate_decay=False, batch_tam=16, X_valid=X_valid_digits, y_valid=y_valid_digits)
-    clasificador.entrena(X_train_digits, y_train_digits, n_epochs=2000)
-
-    # Save the trained classifier
-    import pickle
-    with open("digits_classifier.pickle", "wb") as f:
-        pickle.dump(clasificador, f)
-    # Load the trained classifier
-    # import pickle
-    # with open("digits_classifier.pickle", "rb") as f:
-    #     clasificador = pickle.load(f)
-    print("Performance:", rendimiento(clasificador, X_test_digits, y_test_digits))
-
-##jj()
+    clasificador = RegresionLogisticaOvR(normalizacion=True, rate=0.01, rate_decay=True, batch_tam=128, X_valid=X_valid_digits, y_valid=y_valid_digits)
+    clasificador.entrena(X_train_digits, y_train_digits, n_epochs=1000)
+    return rendimiento(clasificador, X_test_digits, y_test_digits)
 
 # ---------------------------------------------------------
 # ---------------------------------------------------------

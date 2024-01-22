@@ -78,58 +78,49 @@ def __stable_sigmoid(x) -> float:
 ## Image feature extraction
 import cv2
 
-def extract_features(matrix):
+def crop_image_to_letter(image):
+    # Crop the image around the letter
+    x, y, w, h = cv2.boundingRect(image)
+    cropped_image = image[y:y+h, x:x+w]
+
+    return cropped_image
+
+def extract_features(matrix, save=False):
     features = {}
 
     # Convert the matrix to an 8-bit grayscale image
     image = np.uint8(matrix * 255)
 
     # Normalize the image
-    normalized_image = image / 255.0
+    width = 28 # Because the letter is 28x28 pixels in the dataset
+    half_width = int(width / 2)
+    normalized_image = cv2.resize(crop_image_to_letter(image), (width, width))
+    if save:
+        cv2.imwrite('test.png', normalized_image)
 
-    # Aspect Ratio
-    x, y, w, h = cv2.boundingRect(image)
-    features['aspect_ratio'] = w / h if h > 0 else 0
-
-    # Find quadrant density in only the areas where there are pixels
-    # This is done by finding the bounding rectangle of the image
-    # and then cropping the image to only the area where there are pixels
-    # This is done for each quadrant
+    # Quadrant Density
     for i in range(2):
         for j in range(2):
-            quadrant = normalized_image[i*14:(i+1)*14, j*14:(j+1)*14]
-            # Registering the difference between the mean of the quadrant and the mean of the cropped quadrant
-            features[f'density_q{i}{j}'] = np.mean(quadrant) - np.mean(quadrant[y:y+h, x:x+w])
+            quadrant = normalized_image[i*half_width:(i+1)*half_width, j*half_width:(j+1)*half_width]
+            features[f'density_q{i}{j}'] = np.mean(quadrant)
 
     # Edge Count using Canny Edge Detector
-    edges = cv2.Canny(image, 100, 200)
-    #features['edge_count'] = np.sum(edges > 0)
+    edges = cv2.Canny(normalized_image, 100, 300)
+    features['edge_count'] = np.sum(edges > 0)
 
-    # Identify the contours of the cropped image to find the number of holes
+    # Calculate total perimeter of contours
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    features['holes'] = len(contours)
+    total_perimeter = sum(cv2.arcLength(cnt, True) for cnt in contours)
+    features['perimeter'] = total_perimeter
 
-    # Horizontal/Vertical Line Histograms
-    #features['horizontal_line_hist'] = np.sum(normalized_image, axis=1).mean()
-    #features['vertical_line_hist'] = np.sum(normalized_image, axis=0).mean()
+    # Calculate the area of the contours
+    total_area = sum(cv2.contourArea(cnt) for cnt in contours)
+    features['area'] = total_area
 
-    # Compactness
-    #area = np.sum(normalized_image)
-    #perimeter = np.sum(edges)
-    #features['compactness'] = (perimeter ** 2) / area if area > 0 else 0
+    # Calculate the solidity of the contours
+    features['solidity'] = total_area / total_perimeter if total_perimeter != 0 else 0
 
-    # Symmetry
-    #features['symmetry'] = np.sum(np.abs(normalized_image - normalized_image[::-1, ::-1]))
+    # Convert the features to a flat array
+    feature_values = np.array(list(features.values()), dtype=np.float32)
 
-    # Fourier Transform
-    fourier = np.fft.fft2(normalized_image)
-    features['fourier'] = np.sum(np.abs(fourier))
-
-    # Edge Density
-    #features['edge_density'] = np.sum(edges) / np.sum(normalized_image)
-
-    # Center of Mass
-    features['center_of_mass'] = np.sum(normalized_image * np.indices(normalized_image.shape)) / np.sum(normalized_image)
-
-    # More features like symmetry, edge detection, etc. can be added here
-    return np.array(list(features.values()))
+    return feature_values
