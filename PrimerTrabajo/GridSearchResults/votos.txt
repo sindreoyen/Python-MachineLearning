@@ -1,0 +1,7 @@
+Grid search finished for votos
+Date: 30/11/2023 02:35:06
+Best parameters: {'normalizacion': True, 'rate': 0.01, 'rate_decay': False, 'batch_tam': 128, 'X_valid': None, 'y_valid': None}
+With a performance of: 0.9482029598308668
+With k = 4 partitions
+With 80 combinations of parameters
+With a total of 320 trainings
