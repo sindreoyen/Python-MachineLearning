@@ -4,4 +4,6 @@ numpy
 scipy
 pandas
 tensorflow
+ucimlrepo
 opencv-python
+imblearn
