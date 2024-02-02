@@ -7,4 +7,3 @@ tensorflow
 ucimlrepo
 opencv-python
 imblearn
-seaborn
