@@ -1,5 +1,5 @@
 
 *.DS_Store
-*/*/aclImdb/*
+*/*/*/aclImdb/*
 .venv
 *.pyc

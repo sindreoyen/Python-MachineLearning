@@ -1,3 +1,6 @@
-# Python projects
+## Requirements
 
-Before running the code, make sure to run ```python3 -m pip install -r requirements.txt``` or your preferred method of installing the python packages for this library.
+```python3 -m pip install -r requirements.txt```
+
+## Contents
+This repository contains the exercises and two larger practical deliveries performed as part of the course Aprendizaje Automático.
