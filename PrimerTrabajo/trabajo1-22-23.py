@@ -174,7 +174,7 @@ class RegresionLogisticaMiniBatch():
     def __init__(self,normalizacion:bool=False,
                  rate:float=0.1,rate_decay=False,batch_tam:int=64,
                  pesos_iniciales=None, 
-                 epsilon:float=1e-4, patience=50,
+                 epsilon:float=1e-2, patience=200,
                  X_valid:np.ndarray=None, y_valid:np.ndarray=None):
         '''
         This class implements the mini-batch logistic regression classifier.
@@ -224,10 +224,12 @@ class RegresionLogisticaMiniBatch():
 
         # Initialize weights if necessary
         if reiniciar_pesos or not self.trained or self.pesos is None:
-            self.pesos = np.random.uniform(-1, 1, entr.shape[1])
+            self.pesos = np.random.uniform(-1, 1, entr.shape[1]) if self.pesos_iniciales is None else self.pesos_iniciales
 
         # Normalize the data if needed
-        entr = normalize(entr) if self.normalizacion else entr
+        self.mean = np.mean(entr, axis=0)
+        self.std = np.std(entr, axis=0)
+        entr = normalize(X=entr, mean=self.mean, std=self.std) if self.normalizacion else entr
 
         # Calculate the number of batches
         num_batches = int(np.ceil(entr.shape[0] / self.batch_tam))
@@ -244,7 +246,13 @@ class RegresionLogisticaMiniBatch():
                 break
             # Calculate the learning rate for the current epoch
             if print_loading: printProgressBar(epoch + 1, n_epochs, prefix = 'Training progress: ', suffix = "of {} epochs ran".format(n_epochs), length = 30)
-            temp_rate = self.__new_rate(epoch) if self.rate_decay else self.rate
+            self.rate = self.__new_rate(epoch) if self.rate_decay else self.rate
+            
+            # Shuffle the data
+            random_seed = np.random.randint(0, 1000)
+            np.random.RandomState(seed=random_seed).shuffle(clas_entr)
+            np.random.RandomState(seed=random_seed).shuffle(entr)
+
             # Iterate over the batches
             for batch_index in np.random.permutation(num_batches):
                 # Define the start and end index for the current batch
@@ -256,12 +264,17 @@ class RegresionLogisticaMiniBatch():
                 entr_batch = entr[start_index:end_index]
                 clas_entr_batch = clas_entr[start_index:end_index]
                 
-                # Calculate the weight updates for the current batch
-                for i in range(len(self.pesos)):
-                    gradient = entr_batch[:, i].dot(clas_entr_batch - entr_batch.dot(self.pesos))
-                    # Here I experienced extreme values for the gradient, which caused the weights to explode.
-                    # To prevent this, I am clipping the gradient to a value between -1 and 1.
-                    self.pesos[i] += temp_rate * np.clip(gradient, -1, 1)
+                # Mini batch gradient descent
+                # Calculate the dot product for the entire batch
+                dot_product = np.dot(entr_batch, self.pesos)
+                # Apply the sigmoid function to the dot product directly (vectorized operation)
+                prob = sigmoid(dot_product, stable=False)
+
+                # Calculate the gradient
+                gradient = np.dot(entr_batch.T, prob - clas_entr_batch) / entr_batch.shape[0]
+                # Update the weights
+                self.pesos -= self.rate * gradient
+
             
             if self.patience > 0 and self.X_valid is not None and self.y_valid is not None:
                 # Calculate the loss for the current epoch
@@ -287,9 +300,9 @@ class RegresionLogisticaMiniBatch():
         '''
         if not self.trained and not for_early_stop: raise ClasificadorNoEntrenado()
         # Normalize the data if needed
-        E = normalize(E) if self.normalizacion else E
+        E_copy = normalize(X=E, mean=self.mean, std=self.std) if self.normalizacion else E
         # Calculate the probabilities with the sigmoid function
-        return np.array([sigmoid(np.dot(e, self.pesos), stable=False) for e in E], dtype=float)
+        return np.array([sigmoid(np.dot(e, self.pesos), stable=False) for e in E_copy], dtype=float)
 
     def clasifica(self,E):
         '''
@@ -461,6 +474,8 @@ def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5, n_epoc
     if n > len(X): raise ValueError("The number of partitions must be less than the number of examples")
     if len(X) != len(y): raise ValueError("The length of X and y must be the same")
 
+    X, X_prueba, y, y_prueba = particion_entr_prueba(X, y, test=0.2)
+
     # Partitioning the data using the particion_entr_prueba function
     # Init empty arrays
     X_partitions = np.empty((n,), dtype=object)
@@ -482,7 +497,7 @@ def rendimiento_validacion_cruzada(clase_clasificador, params, X, y, n=5, n_epoc
         classifier.entrena(X_train, y_train, print_loading = not grid_search, n_epochs=n_epochs)
         if not grid_search: print("Training", "#", i + 1, "done")
         # Calculate the performance for the current partition
-        performances[i] = rendimiento(classifier, X_partitions[i], y_partitions[i])
+        performances[i] = rendimiento(classifier, X_prueba, y_prueba)
     
     # Return the average performance
     return np.mean(performances)
