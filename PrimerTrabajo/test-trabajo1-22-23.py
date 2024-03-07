@@ -89,16 +89,13 @@ class TestExercise2(unittest.TestCase):
 class TestExercise3(unittest.TestCase):
     def test_rendimiento_validacion_cruzada(self):
         print("\n[ #3 ] Running test_rendimiento_validacion_cruzada...")
-        # Votos tests
-        Xe_votos, _, ye_votos, _ = trabajo.particion_entr_prueba(datos.X_votos, datos.y_votos)
-        performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, trabajo.votos_best_params, Xe_votos, ye_votos, 4)
+        performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, trabajo.votos_best_params, datos.X_votos, datos.y_votos, 4)
         print("Votos performance: ", performance)
         # Should be > 0.75 for acceptable performance
         self.assertTrue(performance > 0.75, "Votos performance should be > 0.75, got {}".format(performance))
 
-        # Cancer tests
-        Xe_cancer, _, ye_cancer, _ = trabajo.particion_entr_prueba(datos.X_cancer, datos.y_cancer)
-        performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, trabajo.cancer_best_params, Xe_cancer, ye_cancer, 4)
+        # Cancer test
+        performance = trabajo.rendimiento_validacion_cruzada(trabajo.RegresionLogisticaMiniBatch, trabajo.cancer_best_params, datos.X_cancer, datos.y_cancer, 4)
         print("Cancer performance: ", performance)
         # Should be > 0.75 for acceptable performance
         self.assertTrue(performance > 0.75, "Cancer performance should be > 0.75, got {}".format(performance))
@@ -170,4 +167,33 @@ class TestDigitDataExtract(unittest.TestCase):
         print(u'\n\n\u2714', "test_digits_training passed\n\n")
 
 if __name__ == '__main__':
-    unittest.main()
+    # Let the user select which exercise to test
+    print("Select the exercise to test:")
+    print("1. Partición de datos")
+    print("2. Regresión logística mini-batch")
+    print("3. Rendimiento validación cruzada")
+    print("4. Regresión logística OvR")
+    print("5. OneHotEncoder")
+    print("6. Digits data")
+    print("7. All")
+    print("8. Exit")
+    exercise = input("Enter the exercise number: ")
+
+    if exercise == "1":
+        unittest.main(argv=[''], verbosity=2, exit=False, defaultTest='TestExercise1')
+    elif exercise == "2":
+        unittest.main(argv=[''], verbosity=2, exit=False, defaultTest='TestExercise2')
+    elif exercise == "3":
+        unittest.main(argv=[''], verbosity=2, exit=False, defaultTest='TestExercise3')
+    elif exercise == "4":
+        unittest.main(argv=[''], verbosity=2, exit=False, defaultTest='TestExercise5')
+    elif exercise == "5":
+        unittest.main(argv=[''], verbosity=2, exit=False, defaultTest='TestExercise6')
+    elif exercise == "6":
+        unittest.main(argv=[''], verbosity=2, exit=False, defaultTest='TestDigitDataExtract')
+    elif exercise == "7":
+        unittest.main(argv=[''], verbosity=2, exit=False)
+    elif exercise == "8":
+        print("Exiting...")
+    else:
+        print("Invalid exercise number")

@@ -27,16 +27,13 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
 # Utils for ML
 import numpy as np
 
-def normalize(X):
+def normalize(X, mean, std):
     '''
     Normalizes the data in X.
 
     param X: the data to normalize
     return: the normalized data
     '''
-    # Calculate the mean and standard deviation for each column
-    mean = np.mean(X, axis=0)
-    std = np.std(X, axis=0)
     # Normalize the data
     return (X - mean) / std
 
@@ -50,14 +47,17 @@ def binary_cross_entropy(y, p):
     # Check for invalid values
     return -y * np.log(p) - (1 - y) * np.log(1 - p) if p != 0 and p != 1 else 0
 
-def sigmoid(x, stable=False) -> float:
+def sigmoid(X, stable=False) -> float:
     '''
     This method calculates the sigmoid function for a value x.
 
-    param x: the value to calculate the sigmoid function for
+    param x: numpy array to calculate the sigmoid for
     return: the sigmoid of the value
     '''
-    return float(1 / (1 + np.exp(-x))) if not stable else __stable_sigmoid(x)
+    if stable:
+        return np.vectorize(__stable_sigmoid)(X)
+    else:
+        return 1 / (1 + np.exp(-X))
 def __stable_sigmoid(x) -> float:
     '''
     Numerically stable sigmoid function.
